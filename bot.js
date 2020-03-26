@@ -3,6 +3,7 @@ const client = new Discord.Client();
 const fs = require('fs')
 const lame = require('lame')
 const mkdirp = require('mkdirp');
+const mp3cut = require('child_process')
 
 const { Readable } = require('stream');
 
@@ -75,7 +76,7 @@ client.on('message', msg => {
         ).then(textChannel => {
           guildChannel.join().then(conn => {
             var usedNumbers = []
-            var dirname = './recordings/' + firstPlayer.tag + " " + secondPlayer.tag + " " + Date.now() 
+            var dirname = './recordings/' + firstPlayer.tag + "-" + secondPlayer.tag + "-" + Date.now() 
             mkdirp.sync(dirname)
             mkdirp.sync(dirname + "/" + firstPlayer.tag)
             mkdirp.sync(dirname + "/" + secondPlayer.tag)
@@ -94,6 +95,9 @@ client.on('message', msg => {
               secondPlayerFeedback: false,
             }
 
+            var nextPlayer = secondPlayer
+            textChannel.send("Greetings!")
+            textChannel.send(firstPlayer.tag + " turn!")
             var nextQuestion = getRandomInt(0, questions.length)
             textChannel.send(questions[nextQuestion])
             usedNumbers.push(nextQuestion)
@@ -110,10 +114,20 @@ client.on('message', msg => {
                   msg.channel.send("Game is Over: " + oldState.member.user.tag + " leave from channel")
 
                   fs.writeFileSync(dirname + "/rate.txt", firstPlayer.tag + ": " + playersRates.firstPlayerRate + "\n" +
-                                                          secondPlayer.tag + ": " + playersRates.secondPlayerRate + "\n")
+                                                          secondPlayer.tag + ": " + playersRates.secondPlayerRate + "\n");
 
                   fs.writeFileSync(dirname + "/feedback.txt", firstPlayer.tag + ": " + playersFeedback.firstPlayerFeedback + "\n" +
-                                                          secondPlayer.tag + ": " + playersFeedback.secondPlayerFeedback + "\n")
+                                                          secondPlayer.tag + ": " + playersFeedback.secondPlayerFeedback + "\n");
+                  
+                  mkdirp.sync("/var/www/html/" + dirname + "/" + firstPlayer.tag)
+                  mkdirp.sync("/var/www/html/" + dirname + "/" + secondPlayer.tag)
+
+                  mp3cut.execSync('mp3wrap ' + "/var/www/html/" + dirname + "/" + firstPlayer.tag + '/ouput.mp3 `ls -1v ' + dirname + '/' + firstPlayer.tag + '/*.mp3`')
+                  try {
+                    mp3cut.execSync('mp3wrap ' + "/var/www/html/" + dirname + "/" + secondPlayer.tag + '/ouput.mp3 `ls -1v ' + dirname + '/' + secondPlayer.tag + '/*.mp3`')
+                  } catch (error) {
+                    console.log(error)
+                  }
                   guildChannel.leave();
                   guildChannel.delete();
                   textChannel.delete();
@@ -206,12 +220,12 @@ client.on('message', msg => {
 
               if (msg.content.startsWith(config.prefix + 'finish') && msg.channel.id == textChannel.id && !finishFlag) {
                 finishFlag = true
-
+                textChannel.send("Thank you for playing")
                 textChannel.send("You just finished playing. How would you rate your experience: 1 (bad) - 5 (great)?");
                 rateGameFlag = true 
               }
 
-              if (msg.content.startsWith(config.prefix + 'next')  && msg.channel.id == textChannel.id && !finishFlag) {
+              if (msg.content.startsWith(config.prefix + 'next')  && msg.channel.id == textChannel.id && !finishFlag && nextPlayer.id == msg.author.id) {
                 if (questions.length == usedNumbers.length) {
                   textChannel.send("Questions are over!")
                   return
@@ -221,8 +235,16 @@ client.on('message', msg => {
                   var nextQuestion = getRandomInt(0, questions.length)
                 } while (usedNumbers.includes(nextQuestion))
 
+                if (nextPlayer.id != firstPlayer.id) {
+                  nextPlayer = firstPlayer
+                } else {
+                  nextPlayer = secondPlayer
+                }
+
+                textChannel.send(nextPlayer.tag + " your question now")
                 textChannel.send(questions[nextQuestion])
                 usedNumbers.push(nextQuestion)
+
               }
             });
           })
