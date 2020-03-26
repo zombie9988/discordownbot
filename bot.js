@@ -19,11 +19,7 @@ function getRandomInt(min, max) {
 var questions = fs.readFileSync('questions.txt').toString().split('\r\n')
 //console.log(questions)
 
-var config = {
-    prefix: '/',
-    token: 'NjkyMzE1ODY0NTI3MDExODQw.XnsyBw.hWhSA3J9NfMaL3DG2Cd7EHgkBWQ',
-}
-
+var config = require("./config.json")
 interestedState = 0
 var firstPlayer;
 
