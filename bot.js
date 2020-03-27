@@ -23,17 +23,19 @@ var questions = fs.readFileSync('questions.txt').toString().split('\r\n')
 var config = require("./config.json")
 interestedState = 0
 var firstPlayer;
-
+var firstMember;
 client.on('message', msg => {
   if (msg.content.startsWith(config.prefix + 'startgame') && interestedState == 0) {
     msg.channel.send("Who is interested?");
     interestedState = 1;
     firstPlayer = msg.author;
+    firstMember = msg.member;
     return
   }
 
   if (msg.content.startsWith(config.prefix + 'startgame') && interestedState == 1) {
       var secondPlayer = msg.author;
+      var secondMember = msg.member;
       interestedState = 2
 
       msg.guild.channels.create(firstPlayer.tag + " " + secondPlayer.tag, 
@@ -42,15 +44,15 @@ client.on('message', msg => {
           permissionOverwrites: [
             {
                 id: msg.guild.roles.everyone,
-                deny: ['CONNECT']
+                deny: ['CONNECT', "CREATE_INSTANT_INVITE", "VIEW_CHANNEL", "SPEAK"]
             },
             {
                 id: firstPlayer.id,
-                allow: ['CONNECT']
+                allow: ['CONNECT', "VIEW_CHANNEL", "SPEAK"]
             },
             {
                 id: secondPlayer.id,
-                allow: ['CONNECT']
+                allow: ['CONNECT', "VIEW_CHANNEL", "SPEAK"]
             },
           ]
       }
@@ -61,7 +63,7 @@ client.on('message', msg => {
             permissionOverwrites: [
               {
                   id: msg.guild.roles.everyone,
-                  deny: ['READ_MESSAGE_HISTORY', 'SEND_MESSAGES', 'VIEW_CHANNEL']
+                  deny: ['CREATE_INSTANT_INVITE', 'READ_MESSAGE_HISTORY', 'SEND_MESSAGES', 'VIEW_CHANNEL']
               },
               {
                   id: firstPlayer.id,
@@ -75,12 +77,22 @@ client.on('message', msg => {
         }
         ).then(textChannel => {
           guildChannel.join().then(conn => {
-            var usedNumbers = []
-            var dirname = './recordings/' + firstPlayer.tag + "-" + secondPlayer.tag + "-" + Date.now() 
+            
+            var dirname = './recordings/' + firstPlayer.tag + "-" + secondPlayer.tag + "-" + Date.now()
+            
+
             mkdirp.sync(dirname)
             mkdirp.sync(dirname + "/" + firstPlayer.tag)
             mkdirp.sync(dirname + "/" + secondPlayer.tag)
 
+            firstMember.voice.setChannel(guildChannel).then(member => {
+            })
+
+            secondMember.voice.setChannel(guildChannel).then(member => {
+            })
+
+            var questionCounter = 0
+            var usedNumbers = []
             var finishFlag = false
             var rateGameFlag = false
             var feedbackFlag = false
@@ -95,12 +107,8 @@ client.on('message', msg => {
               secondPlayerFeedback: false,
             }
 
-            var nextPlayer = secondPlayer
-            textChannel.send("Greetings!")
-            textChannel.send(firstPlayer.tag + " turn!")
-            var nextQuestion = getRandomInt(0, questions.length)
-            textChannel.send(questions[nextQuestion])
-            usedNumbers.push(nextQuestion)
+            var nextPlayer = firstPlayer
+            textChannel.send("Greetings! Type /next to start")
 
             conn.play(new Silence(), {type: 'opus'})
             var playerChunks = {
@@ -110,7 +118,7 @@ client.on('message', msg => {
             
             client.on('voiceStateUpdate', (oldState, newState) => {
               if (oldState.member.id == firstPlayer || oldState.member.id == secondPlayer) {
-                if (oldState.channelID == guildChannel.id && newState.channelID != guildChannel.id) {
+                if (oldState.channelID == guildChannel.id && newState.channelID != guildChannel.id && guildChannel.members.array().length == 1) {
                   msg.channel.send("Game is Over: " + oldState.member.user.tag + " leave from channel")
 
                   fs.writeFileSync(dirname + "/rate.txt", firstPlayer.tag + ": " + playersRates.firstPlayerRate + "\n" +
@@ -122,12 +130,18 @@ client.on('message', msg => {
                   mkdirp.sync("/var/www/html/" + dirname + "/" + firstPlayer.tag)
                   mkdirp.sync("/var/www/html/" + dirname + "/" + secondPlayer.tag)
 
-                  mp3cut.execSync('mp3wrap ' + "/var/www/html/" + dirname + "/" + firstPlayer.tag + '/ouput.mp3 `ls -1v ' + dirname + '/' + firstPlayer.tag + '/*.mp3`')
+                  try {
+                    mp3cut.execSync('mp3wrap ' + "/var/www/html/" + dirname + "/" + firstPlayer.tag + '/ouput.mp3 `ls -1v ' + dirname + '/' + firstPlayer.tag + '/*.mp3`')
+                  } catch (error) {
+                    console.log("No audio for " + firstPlayer.tag)
+                  }
+                  
                   try {
                     mp3cut.execSync('mp3wrap ' + "/var/www/html/" + dirname + "/" + secondPlayer.tag + '/ouput.mp3 `ls -1v ' + dirname + '/' + secondPlayer.tag + '/*.mp3`')
                   } catch (error) {
-                    console.log(error)
+                    console.log("No audio for " + secondPlayer.tag)
                   }
+
                   guildChannel.leave();
                   guildChannel.delete();
                   textChannel.delete();
@@ -224,6 +238,27 @@ client.on('message', msg => {
                 textChannel.send("You just finished playing. How would you rate your experience: 1 (bad) - 5 (great)?");
                 rateGameFlag = true 
               }
+              
+              if (msg.content.startsWith(config.prefix + 'restart')  && msg.channel.id == textChannel.id) {
+                finishFlag = false
+                rateGameFlag = false
+                feedbackFlag = false
+
+                playersRates = {
+                  firstPlayerRate: false,
+                  secondPlayerRate: false,
+                }
+
+                playersFeedback = {
+                  firstPlayerFeedback: false,
+                  secondPlayerFeedback: false,
+                }
+
+                questionCounter = 0
+                usedNumbers = []
+
+                textChannel.send("Game was restarted! Type /next to continue")
+              }
 
               if (msg.content.startsWith(config.prefix + 'next')  && msg.channel.id == textChannel.id && !finishFlag && nextPlayer.id == msg.author.id) {
                 if (questions.length == usedNumbers.length) {
@@ -231,20 +266,29 @@ client.on('message', msg => {
                   return
                 }
 
+                var nextQuestion
                 do {
-                  var nextQuestion = getRandomInt(0, questions.length)
+                  nextQuestion = getRandomInt(0, questions.length)
                 } while (usedNumbers.includes(nextQuestion))
+                usedNumbers.push(nextQuestion)
 
                 if (nextPlayer.id != firstPlayer.id) {
                   nextPlayer = firstPlayer
                 } else {
                   nextPlayer = secondPlayer
+                  questionCounter += 1
+
+                  if (questionCounter == 6) {
+                    finishFlag = true
+                    textChannel.send("Thank you for playing")
+                    textChannel.send("You just finished playing. How would you rate your experience: 1 (bad) - 5 (great)?");
+                    rateGameFlag = true
+                    return
+                  }
                 }
 
-                textChannel.send(nextPlayer.tag + " your question now")
-                textChannel.send(questions[nextQuestion])
-                usedNumbers.push(nextQuestion)
-
+                textChannel.send(nextPlayer.tag + " turn!")
+                textChannel.send("Question #" + questionCounter + " is: " + questions[nextQuestion])
               }
             });
           })
@@ -257,4 +301,5 @@ client.login(config.token);
 
 client.on('ready', () => {
   console.log('ready!');
+  client.
 });
