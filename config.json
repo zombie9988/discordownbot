@@ -1,4 +1,8 @@
 {
     "prefix": "/",
-    "token": "NjkyMzE1ODY0NTI3MDExODQw.Xn4WBg.WxSSIJctDX3pj3bx5azDlPZz_NY"
+    "general_token": "NjkyMzE1ODY0NTI3MDExODQw.Xn52Yw.zelKE-KopI7oYevGNpTB-S48ysQ",
+    "recorders_tokens": [
+        "NjkzMzgzMDc5MDgzMTE0NTA3.Xn8RxA.XRh0GgfKhKmSc79wZL_Pw0znMNg",
+        "NjkzMzgzMTEyODYzNzc2Nzg5.Xn8Rtg.R9g6xXtbZm4mSJ9qahEQMmuHIto"
+    ] 
 }
