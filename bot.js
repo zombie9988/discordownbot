@@ -70,7 +70,7 @@ class Listener {
           this.secondPlayer.id,
           this.guildId,
           oldToken => {
-            //console.log(oldToken)
+            console.log(oldToken)
             that.unusedToken.push(oldToken)
           }
         )
@@ -101,7 +101,7 @@ class Recorder {
       that.firstMember = that.client.guilds
         .resolve(that.guildId)
         .members.resolve(that.firstPlayer)
-      that.firstMember = that.client.guilds
+      that.secondMember = that.client.guilds
         .resolve(that.guildId)
         .members.resolve(that.secondPlayer)
 
@@ -253,25 +253,25 @@ class Recorder {
                               guildChannel.members.array().length == 1
                             ) {
                               fs.writeFileSync(
-                                dirname + '/rate.txt',
+                                dirname + '/rate.csv',
                                 that.firstPlayer.tag +
-                                  ': ' +
+                                  ',' +
                                   playersRates.firstPlayerRate +
                                   '\n' +
                                   that.secondPlayer.tag +
-                                  ': ' +
+                                  ',' +
                                   playersRates.secondPlayerRate +
                                   '\n'
                               )
 
                               fs.writeFileSync(
-                                dirname + '/feedback.txt',
+                                dirname + '/feedback.csv',
                                 that.firstPlayer.tag +
-                                  ': ' +
+                                  ',' +
                                   playersFeedback.firstPlayerFeedback +
                                   '\n' +
                                   that.secondPlayer.tag +
-                                  ': ' +
+                                  ',' +
                                   playersFeedback.secondPlayerFeedback +
                                   '\n'
                               )
@@ -387,85 +387,162 @@ class Recorder {
                       })
 
                       that.client.on('message', msg => {
-                        //console.log(msg.content)
-                        if (
-                          rateGameFlag &&
-                          msg.channel.id == textChannel.id &&
-                          (msg.author.id == that.firstPlayer.id ||
-                            msg.author.id == that.secondPlayer.id)
-                        ) {
-                          if (Number(msg.content)) {
-                            if (1 <= Number(msg.content) <= 5) {
-                              if (msg.author.id == that.firstPlayer.id) {
-                                playersRates.firstPlayerRate = msg.content
-                              } else if (
-                                msg.author.id == that.secondPlayer.id
-                              ) {
-                                playersRates.secondPlayerRate = msg.content
-                              }
-                            } else {
-                              textChannel.send(
-                                'Bad number (Need to be from 1 to 5)'
-                              )
-                            }
-                          } else {
-                            textChannel.send('Answer need to be a number')
-                          }
-
-                          if (
-                            playersRates.firstPlayerRate &&
-                            playersRates.secondPlayerRate
-                          ) {
-                            textChannel.send(
-                              'Do you have any feedback (optional):'
-                            )
-                            rateGameFlag = false
-                            feedbackFlag = true
-                          }
-                        }
-
-                        if (
-                          feedbackFlag &&
-                          msg.channel.id == textChannel.id &&
-                          (msg.author.id == that.firstPlayer.id ||
-                            msg.author.id == that.secondPlayer.id)
-                        ) {
-                          if (msg.author.id == that.firstPlayer.id) {
-                            if (!playersFeedback.firstPlayerFeedback) {
-                              playersFeedback.firstPlayerFeedback = msg.content
-                            } else {
-                              playersFeedback.firstPlayerFeedback +=
-                                '\n' + msg.content
-                            }
-                          } else if (msg.author.id == that.secondPlayer.id) {
-                            if (!playersFeedback.secondPlayerFeedback) {
-                              playersFeedback.secondPlayerFeedback = msg.content
-                            } else {
-                              playersFeedback.secondPlayerFeedback +=
-                                '\n' + msg.content
-                            }
-                          }
-
-                          if (
-                            playersRates.firstPlayerRate &&
-                            playersRates.secondPlayerRate
-                          ) {
-                            textChannel.send(
-                              'All right! If you are finished just leave the voice chat'
-                            )
-                          }
-                        }
-
                         if (
                           msg.content.startsWith(config.prefix + 'finish') &&
                           msg.channel.id == textChannel.id &&
                           !finishFlag
                         ) {
                           finishFlag = true
-                          textChannel.send('Thank you for playing')
-                          textChannel.send(
-                            'You just finished playing. How would you rate your experience: 1 (bad) - 5 (great)?'
-                          )
+                          textChannel.send('Thank you for playing (Please answer some questions without disconnecting)')
+                          var waitTime = 60000
+                          that.firstMember.createDM().then(dmChannel => {
+                            dmChannel
+                              .send(
+                                'You just finished playing. How would you rate your experience: 1 (bad) - 5 (great)?'
+                              )
+                              .then(msg => {
+                                // Errors: ['time'] treats ending because of the time limit as an error
+                                const filter = msg => {
+                                  if (Number(msg.content)) {
+                                    if (1 <= Number(msg.content) <= 5) {
+                                      playersRates.firstPlayerRate = msg.content
+                                      return true
+                                    } else {
+                                      return false
+                                    }
+                                  } else {
+                                    return false
+                                  }
+                                }
+                                dmChannel
+                                  .awaitMessages(filter, {
+                                    max: 1,
+                                    time: waitTime,
+                                    errors: ['time']
+                                  })
+                                  .then(collected =>
+                                    dmChannel
+                                      .send(
+                                        'Do you have any feedback (optional):'
+                                      )
+                                      .then(msg => {
+                                        const filter = msg => {
+                                          playersFeedback.firstPlayerFeedback = msg.content
+                                          return true
+                                        }
+                                        dmChannel
+                                          .awaitMessages(filter, {
+                                            max: 1,
+                                            time: waitTime,
+                                            errors: ['time']
+                                          })
+                                          .then(collected => {
+                                            dmChannel.send("Thank you for playing")
+                                            try {
+                                              that.firstMember.voice
+                                                .setChannel(null)
+                                                .then(member => {})
+                                            } catch (error) {
+                                              console.log("Can't connect first user to channel")
+                                            }
+                                          }).catch(collected =>
+                                            {dmChannel.send("Thank you for playing")
+                                            try {
+                                              that.firstMember.voice
+                                                .setChannel(null)
+                                                .then(member => {})
+                                            } catch (error) {
+                                              console.log("Can't connect first user to channel")
+                                            }
+                                          })
+                                      })
+                                  )
+                                  .catch(collected =>
+                                    {dmChannel.send("Thank you for playing")
+                                    try {
+                                      that.firstMember.voice
+                                        .setChannel(null)
+                                        .then(member => {})
+                                    } catch (error) {
+                                      console.log("Can't connect first user to channel")
+                                    }
+                                  })
+                              })
+                          })
+                          that.secondMember.createDM().then(dmChannel => {
+                            dmChannel
+                              .send(
+                                'You just finished playing. How would you rate your experience: 1 (bad) - 5 (great)?'
+                              )
+                              .then(msg => {
+                                // Errors: ['time'] treats ending because of the time limit as an error
+                                const filter = msg => {
+                                  if (Number(msg.content)) {
+                                    if (1 <= Number(msg.content) <= 5) {
+                                      playersRates.secondPlayerRate = msg.content
+                                      return true
+                                    } else {
+                                      return false
+                                    }
+                                  } else {
+                                    return false
+                                  }
+                                }
+                                dmChannel
+                                  .awaitMessages(filter, {
+                                    max: 1,
+                                    time: waitTime,
+                                    errors: ['time']
+                                  })
+                                  .then(collected =>
+                                    dmChannel
+                                      .send(
+                                        'Do you have any feedback (optional):'
+                                      )
+                                      .then(msg => {
+                                        const filter = msg => {
+                                          playersFeedback.secondPlayerFeedback = msg.content
+                                          return true
+                                        }
+                                        dmChannel
+                                          .awaitMessages(filter, {
+                                            max: 1,
+                                            time: waitTime,
+                                            errors: ['time']
+                                          })
+                                          .then(collected => {
+                                            dmChannel.send("Thank you for playing")
+                                            try {
+                                              that.secondMember.voice
+                                                .setChannel(null)
+                                                .then(member => {})
+                                            } catch (error) {
+                                              console.log("Can't connect first user to channel")
+                                            }
+                                          }).catch(collected =>
+                                            {dmChannel.send("Thank you for playing")
+                                            try {
+                                              that.secondMember.voice
+                                                .setChannel(null)
+                                                .then(member => {})
+                                            } catch (error) {
+                                              console.log("Can't connect first user to channel")
+                                            }}
+                                          )
+                                      })
+                                  )
+                                  .catch(collected =>
+                                    {dmChannel.send("Thank you for playing")
+                                    try {
+                                      that.secondMember.voice
+                                        .setChannel(null)
+                                        .then(member => {})
+                                    } catch (error) {
+                                      console.log("Can't connect first user to channel")
+                                    }}
+                                  )
+                              })
+                          })
                           rateGameFlag = true
                         }
 
@@ -491,7 +568,9 @@ class Recorder {
                           usedNumbers = []
                           nextPlayer = that.firstPlayer
                           textChannel.send(
-                            'Game Restarted , ' + msg.author.tag + ', type /next'
+                            'Game Restarted , ' +
+                              msg.author.tag +
+                              ', type /next'
                           )
                         }
 
