@@ -21,6 +21,7 @@ class Listener {
   constructor (botToken, additionalTokens) {
     this.token = botToken
     this.client = new Discord.Client()
+    this.alreadyPlay = []
 
     this.client.login(this.token)
 
@@ -41,10 +42,16 @@ class Listener {
           msg.channel.send('Sorry, no free recorders')
           return
         }
+
+        if (this.alreadyPlay.includes(msg.author.id)) {
+          msg.channel.send("You already in game")
+          return
+        }
         msg.channel.send('Who is interested?')
         this.interestedState = 1
         this.firstPlayer = msg.author
         this.firstMember = msg.member
+        this.alreadyPlay.push(msg.author.id)
         return
       }
 
@@ -52,16 +59,28 @@ class Listener {
         msg.content.startsWith(config.prefix + 'startgame') &&
         this.interestedState == 1
       ) {
+
+        if (this.alreadyPlay.includes(msg.author.id)) {
+          msg.channel.send("You already in game")
+          return
+        }
         this.secondPlayer = msg.author
         this.secondMember = msg.member
-        this.guildId = msg.guild.id
+        try {
+          this.guildId = msg.guild.id  
+        } catch (error) {
+          console.log("Ls error")
+          return
+        }
+        
         this.interestedState = 0
 
         if (this.unusedToken.length == 0) {
           msg.channel.send('Sorry, no free recorders')
           return
         }
-
+        
+        this.alreadyPlay.push(msg.author.id)
         let recorder = new Recorder()
 
         recorder.startRecord(
@@ -79,14 +98,26 @@ class Listener {
     //console.log(inputData)
     this.unusedToken.push(inputData.token)
     var dirname = inputData.dir
+    var firstPlayer = inputData.firstP
+    var secondPlayer = inputData.secondP
+    var firstMember = this.client.guilds
+        .resolve(this.guildId)
+        .members.resolve(firstPlayer)
 
+    var secondMember = this.client.guilds
+        .resolve(this.guildId)
+        .members.resolve(secondPlayer)
+
+    
+    this.alreadyPlay.splice(this.alreadyPlay.indexOf(firstPlayer.id), 1)
+    this.alreadyPlay.splice(this.alreadyPlay.indexOf(secondPlayer.id), 1)
     var waitTime = 60000
     var that = this
     var firstPlayerRate
     var firstPlayerFeedback
     var secondPlayerRate
     var secondPlayerFeedback
-    this.firstMember.createDM().then(dmChannel => {
+    firstMember.createDM().then(dmChannel => {
       dmChannel
         .send(
           'You just finished playing. How would you rate your experience: 1 (bad) - 5 (great)?'
@@ -128,7 +159,7 @@ class Listener {
                     .then(collected => {
                       dmChannel.send('Thank you for playing')
                       try {
-                        that.firstMember.voice
+                        firstMember.voice
                           .setChannel(null)
                           .then(member => {})
                       } catch (error) {
@@ -138,7 +169,7 @@ class Listener {
                     .catch(collected => {
                       dmChannel.send('Thank you for playing')
                       try {
-                        that.firstMember.voice
+                        firstMember.voice
                           .setChannel(null)
                           .then(member => {})
                       } catch (error) {
@@ -148,12 +179,12 @@ class Listener {
                     .finally(() => {
                       fs.appendFileSync(
                         dirname + '/rate.csv',
-                        that.firstPlayer.tag + ',' + firstPlayerRate + '\n'
+                        firstPlayer.tag + ',' + firstPlayerRate + '\n'
                       )
 
                       fs.appendFileSync(
                         dirname + '/feedback.csv',
-                        that.firstPlayer.tag + ',' + firstPlayerFeedback + '\n'
+                        firstPlayer.tag + ',' + firstPlayerFeedback + '\n'
                       )
                     })
                 })
@@ -161,7 +192,7 @@ class Listener {
             .catch(collected => {
               dmChannel.send('Thank you for playing')
               try {
-                that.firstMember.voice.setChannel(null).then(member => {})
+                firstMember.voice.setChannel(null).then(member => {})
               } catch (error) {
                 console.log("Can't connect first user to channel")
               }
@@ -169,7 +200,7 @@ class Listener {
         })
     })
 
-    this.secondMember.createDM().then(dmChannel => {
+    secondMember.createDM().then(dmChannel => {
       dmChannel
         .send(
           'You just finished playing. How would you rate your experience: 1 (bad) - 5 (great)?'
@@ -211,7 +242,7 @@ class Listener {
                     .then(collected => {
                       dmChannel.send('Thank you for playing')
                       try {
-                        that.secondMember.voice
+                        secondMember.voice
                           .setChannel(null)
                           .then(member => {})
                       } catch (error) {
@@ -221,7 +252,7 @@ class Listener {
                     .catch(collected => {
                       dmChannel.send('Thank you for playing')
                       try {
-                        that.secondMember.voice
+                        secondMember.voice
                           .setChannel(null)
                           .then(member => {})
                       } catch (error) {
@@ -231,12 +262,12 @@ class Listener {
                     .finally(() => {
                       fs.appendFileSync(
                         dirname + '/rate.csv',
-                        that.secondPlayer.tag + ',' + secondPlayerRate + '\n'
+                        secondPlayer.tag + ',' + secondPlayerRate + '\n'
                       )
 
                       fs.appendFileSync(
                         dirname + '/feedback.csv',
-                        that.secondPlayer.tag +
+                        secondPlayer.tag +
                           ',' +
                           secondPlayerFeedback +
                           '\n'
@@ -247,7 +278,7 @@ class Listener {
             .catch(collected => {
               dmChannel.send('Thank you for playing')
               try {
-                that.secondMember.voice.setChannel(null).then(member => {})
+                secondMember.voice.setChannel(null).then(member => {})
               } catch (error) {
                 console.log("Can't connect first user to channel")
               }
@@ -480,7 +511,11 @@ class Recorder {
                               //console.log(botToken)
                               resolve({
                                 token: botToken,
-                                dir: dirname
+                                dir: dirname,
+                                firstP: that.firstPlayer,
+                                secondP: that.secondPlayer,
+                                firstM: that.firstMember,
+                                secondM: that.secondMember
                               })
                             }
                           }
