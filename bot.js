@@ -7,6 +7,14 @@ const mp3cut = require('child_process')
 
 const { Readable } = require('stream')
 
+process.on("unhandledRejection", (ex) => {
+  console.log( "Unhandled promise rejection", ex);
+});
+
+process.on("uncaughtException", (ex) => {
+  console.log("Uncaught exception", ex);
+});
+
 class Silence extends Readable {
   _read () {
     this.push(Buffer.from([0xf8, 0xff, 0xfe]))
@@ -79,7 +87,7 @@ class Listener {
           msg.channel.send('Sorry, no free recorders')
           return
         }
-        
+
         this.alreadyPlay.push(msg.author.id)
         let recorder = new Recorder()
 
