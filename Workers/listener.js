@@ -1,5 +1,6 @@
 const Discord = require('discord.js')
 const Recorder = require('./recorder')
+const fs = require('fs')
 
 module.exports = class Listener {
   isReadyToStartGame (msg) {

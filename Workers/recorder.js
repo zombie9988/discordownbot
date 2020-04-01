@@ -34,19 +34,20 @@ module.exports = class Recorder {
   saveResults (player, dirname) {
     var webDirname = '/var/www/html/' + dirname + '/' + player.tag
     var dirnamePlayer = dirname + '/' + player.tag
-    var execCmd =
-      'ffmpeg -i "concat:' +
-      childProcess
-        .execSync('ls -1v ' + dirnamePlayer + '/*.mp3')
-        .toString()
-        .split('\n')
-        .join('|') +
-      '" -acodec copy ' +
-      webDirname +
-      '/ouput.mp3'
-    mkdirp.sync(webDirname)
 
     try {
+      var execCmd =
+        'ffmpeg -i "concat:' +
+        childProcess
+          .execSync('ls -1v ' + dirnamePlayer + '/*.mp3')
+          .toString()
+          .split('\n')
+          .join('|') +
+        '" -acodec copy ' +
+        webDirname +
+        '/ouput.mp3'
+      mkdirp.sync(webDirname)
+
       childProcess.execSync(execCmd).toString()
     } catch (error) {
       console.log('No audio for ' + player.tag)
@@ -224,7 +225,14 @@ module.exports = class Recorder {
                             if (
                               oldState.channelID == guildChannel.id &&
                               newState.channelID != guildChannel.id &&
-                              guildChannel.members.array().length == 1
+                              !(
+                                guildChannel.members.find(
+                                  u => u.id == that.firstMember.id
+                                ) ||
+                                guildChannel.members.find(
+                                  u => u.id == that.secondMember.id
+                                )
+                              )
                             ) {
                               that.finishGame(
                                 that.firstPlayer,
@@ -249,7 +257,12 @@ module.exports = class Recorder {
                       )
 
                       conn.on('speaking', (user, state) => {
-                        if (state.bitfield != 0 && user) {
+                        if (
+                          state.bitfield != 0 &&
+                          user &&
+                          (user.id == that.firstPlayer.id ||
+                            user.id == that.secondPlayer.id)
+                        ) {
                           var chunkCounter = 0
                           if (user.id == that.firstPlayer.id) {
                             playerChunks.firstPlayerChunk += 1
