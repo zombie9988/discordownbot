@@ -34,8 +34,9 @@ module.exports = class Recorder {
   saveResults (player, dirname) {
     var webDirname = '/var/www/html/' + dirname + '/' + player.tag
     var dirnamePlayer = dirname + '/' + player.tag
-
+    
     try {
+      /** 
       var execCmd =
         'ffmpeg -i "concat:' +
         childProcess
@@ -46,11 +47,14 @@ module.exports = class Recorder {
         '" -acodec copy ' +
         webDirname +
         '/ouput.mp3'
+        */
       mkdirp.sync(webDirname)
-
-      childProcess.execSync(execCmd).toString()
+      fs.copyFileSync(dirnamePlayer + '/output.wav', webDirname + '/output.wav')
+      this.wavDirs.push(dirnamePlayer + '/output.wav')
+      //childProcess.execSync(execCmd).toString()
     } catch (error) {
       console.log('No audio for ' + player.tag)
+      console.log(error)
     }
   }
 
@@ -62,9 +66,13 @@ module.exports = class Recorder {
     textChannel,
     category
   ) {
+    this.wavDirs = []
     this.saveResults(firstPlayer, dirname)
     this.saveResults(secondPlayer, dirname)
-
+    var webDirname = '/var/www/html/' + dirname + '/'
+    if (this.wavDirs.length > 1) {
+      childProcess.execSync("sox -m " + this.wavDirs.join(" ") + " " + webDirname + "output.wav")
+    }
     guildChannel.delete()
     textChannel.delete()
     category.delete()
@@ -131,6 +139,7 @@ module.exports = class Recorder {
                 ]
               })
               .then(guildChannel => {
+                var startTime = Date.now()
                 guildChannel.setParent(category)
                 console.log('New voice channel created!')
                 localGuild.channels
@@ -202,11 +211,15 @@ module.exports = class Recorder {
                       var firstTurn = true
                       var firstInGame, secondInGame, nextPlayer
 
+                      /*
                       var playerChunks = {
                         firstPlayerChunk: 0,
                         secondPlayerChunk: 0
                       }
+                      */
 
+                      var playerChunks = new Map()
+                      var silenceChunks = new Map()
                       textChannel.send(prompts.textConnect)
 
                       that.client.on(
@@ -256,13 +269,14 @@ module.exports = class Recorder {
                         }
                       )
 
+                      var silenceTiming = new Map()
                       conn.on('speaking', (user, state) => {
                         if (
                           state.bitfield != 0 &&
                           user &&
-                          (user.id == that.firstPlayer.id ||
-                            user.id == that.secondPlayer.id)
+                          user.id != that.client.user.id
                         ) {
+                          /*
                           var chunkCounter = 0
                           if (user.id == that.firstPlayer.id) {
                             playerChunks.firstPlayerChunk += 1
@@ -273,16 +287,40 @@ module.exports = class Recorder {
                             playerChunks.secondPlayerChunk += 1
                             chunkCounter = playerChunks.secondPlayerChunk
                           }
-
+                          */
                           //console.log(state)
+
+                          if (silenceTiming.has(user.tag)) {
+                            silenceTiming.set(
+                              user.tag,
+                              (Date.now() - silenceTiming.get(user.tag)) / 1000
+                            )
+                          } else {
+                            silenceTiming.set(
+                              user.tag,
+                              (Date.now() - startTime) / 1000
+                            )
+                            console.log(
+                              'From start: ' + (Date.now() - startTime) / 1000
+                            )
+                          }
+
+                          if (!playerChunks.has(user.tag)) {
+                            playerChunks.set(user.tag, 0)
+                          } else {
+                            playerChunks.set(
+                              user.tag,
+                              playerChunks.get(user.tag) + 1
+                            )
+                          }
 
                           var encoder = new lame.Encoder({
                             channels: 2,
                             bitDepth: 16,
-                            sampleRate: 48000,
+                            sampleRate: 44100,
 
                             bitRate: 128,
-                            outSampleRate: 22050,
+                            outSampleRate: 44100,
                             mode: lame.STEREO
                           })
 
@@ -292,14 +330,69 @@ module.exports = class Recorder {
                           audio.pipe(encoder)
                           encoder.pipe(
                             fs.createWriteStream(
-                              dirname +
-                                '/' +
-                                user.tag +
-                                '/' +
-                                chunkCounter +
-                                '.mp3'
+                              dirname + '/' + user.tag + '/recorded.mp3'
                             )
                           )
+                        }
+
+                        if (
+                          state.bitfield == 0 &&
+                          user &&
+                          user.id != that.client.user.id
+                        ) {
+                          if (silenceTiming.has(user.tag)) {
+                            var silenceTime = silenceTiming.get(user.tag)
+                            console.log(
+                              'sox -n -r 44100 -c 2 ' +
+                                dirname +
+                                '/' +
+                                user.tag +
+                                '/silence.wav trim 0.0 ' +
+                                silenceTime
+                            )
+                            childProcess.execSync(
+                              'sox -n -r 44100 -c 2 ' +
+                                dirname +
+                                '/' +
+                                user.tag +
+                                '/silence.wav trim 0.0 ' +
+                                silenceTime
+                            )
+                            var silencePath =
+                              dirname + '/' + user.tag + '/silence.wav'
+                            var recordedPath =
+                              dirname + '/' + user.tag + '/recorded.mp3'
+                            var outputPath =
+                              dirname + '/' + user.tag + '/output.wav'
+
+                            var outputPath2 =
+                              dirname + '/' + user.tag + '/output2.wav'
+
+                            if (!fs.existsSync(outputPath)) {
+                              childProcess.execSync(
+                                'sox ' +
+                                  silencePath +
+                                  ' ' +
+                                  recordedPath +
+                                  ' ' +
+                                  outputPath
+                              )
+                            } else {
+                              fs.copyFileSync(outputPath, outputPath2)
+                              childProcess.execSync(
+                                'sox ' +
+                                  outputPath2 +
+                                  ' ' +
+                                  silencePath +
+                                  ' ' +
+                                  recordedPath +
+                                  ' ' +
+                                  outputPath
+                              )
+                            }
+                          }
+
+                          silenceTiming.set(user.tag, Date.now())
                         }
                       })
 
