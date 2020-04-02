@@ -62,10 +62,15 @@ module.exports = class Recorder {
     this.recordedVoices.forEach(user => {
       that.saveResults(user, dirname);
     });
-
+    var allText = "";
+    that.chatHistory.forEach((value, index, array) => {
+      allText += `${value} \n -------------------------------------------------------------------------------------\n`;
+    });
     //this.saveResults(firstPlayer, dirname)
     //this.saveResults(secondPlayer, dirname)
     var webDirname = "/var/www/html/" + dirname + "/";
+    fs.writeFileSync(`${dirname}/chat.txt`, allText);
+    fs.copyFileSync(`${dirname}/chat.txt`, `${webDirname}/chat.txt`);
     if (this.wavDirs.length > 1) {
       childProcess.execSync(
         "sox -m " + this.wavDirs.join(" ") + " " + webDirname + "output.wav"
@@ -182,7 +187,7 @@ module.exports = class Recorder {
                   .then(textChannel => {
                     textChannel.setParent(category);
                     console.log("New text channel created!");
-
+                    that.chatHistory = [];
                     that.client.voice.joinChannel(guildChannel).then(conn => {
                       var dirname =
                         "./recordings/" +
@@ -369,6 +374,10 @@ module.exports = class Recorder {
                       });
 
                       that.client.on("message", msg => {
+                        that.chatHistory.push(
+                          `${msg.author.tag}: ${msg.content}`
+                        );
+
                         if (
                           msg.content.startsWith(config.prefix + "finish") &&
                           msg.channel.id == textChannel.id
