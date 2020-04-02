@@ -1,64 +1,54 @@
-const Discord = require('discord.js')
-const fs = require('fs')
-const lame = require('lame')
-const mkdirp = require('mkdirp')
-const childProcess = require('child_process')
-const { Readable } = require('stream')
+const Discord = require("discord.js");
+const fs = require("fs");
+const lame = require("lame");
+const mkdirp = require("mkdirp");
+const childProcess = require("child_process");
+const { Readable } = require("stream");
 
 class Silence extends Readable {
-  _read () {
-    this.push(Buffer.from([0xf8, 0xff, 0xfe]))
+  _read() {
+    this.push(Buffer.from([0xf8, 0xff, 0xfe]));
   }
 }
 
 module.exports = class Recorder {
-  constructor () {}
+  constructor() {}
 
-  getRandomInt (min, max) {
-    return Math.floor(Math.random() * (max - min)) + min
+  getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min)) + min;
   }
 
-  connectToVoiceChat (member, channel) {
+  connectToVoiceChat(member, channel) {
     try {
       member.voice
         .setChannel(channel)
         .then(member => {})
         .catch(err => {
-          console.log("Can't connect user to channel")
-        })
+          console.log("Can't connect user to channel");
+        });
     } catch (error) {
-      console.log("Can't connect user to channel")
+      console.log("Can't connect user to channel");
     }
   }
 
-  saveResults (player, dirname) {
-    var webDirname = '/var/www/html/' + dirname + '/' + player.tag
-    var dirnamePlayer = dirname + '/' + player.tag
-    
+  saveResults(player, dirname) {
+    var webDirname = "/var/www/html/" + dirname + "/" + player.tag;
+    var dirnamePlayer = dirname + "/" + player.tag;
+
     try {
-      /** 
-      var execCmd =
-        'ffmpeg -i "concat:' +
-        childProcess
-          .execSync('ls -1v ' + dirnamePlayer + '/*.mp3')
-          .toString()
-          .split('\n')
-          .join('|') +
-        '" -acodec copy ' +
-        webDirname +
-        '/ouput.mp3'
-        */
-      mkdirp.sync(webDirname)
-      fs.copyFileSync(dirnamePlayer + '/output.wav', webDirname + '/output.wav')
-      this.wavDirs.push(dirnamePlayer + '/output.wav')
-      //childProcess.execSync(execCmd).toString()
+      mkdirp.sync(webDirname);
+      fs.copyFileSync(
+        dirnamePlayer + "/output.wav",
+        webDirname + "/output.wav"
+      );
+      this.wavDirs.push(dirnamePlayer + "/output.wav");
     } catch (error) {
-      console.log('No audio for ' + player.tag)
-      console.log(error)
+      console.log("No audio for " + player.tag);
+      console.log(error);
     }
   }
 
-  finishGame (
+  finishGame(
     firstPlayer,
     secondPlayer,
     dirname,
@@ -66,169 +56,170 @@ module.exports = class Recorder {
     textChannel,
     category
   ) {
-    this.wavDirs = []
-    this.saveResults(firstPlayer, dirname)
-    this.saveResults(secondPlayer, dirname)
-    var webDirname = '/var/www/html/' + dirname + '/'
+    this.wavDirs = [];
+    var that = this;
+
+    this.recordedVoices.forEach(user => {
+      that.saveResults(user, dirname);
+    });
+
+    //this.saveResults(firstPlayer, dirname)
+    //this.saveResults(secondPlayer, dirname)
+    var webDirname = "/var/www/html/" + dirname + "/";
     if (this.wavDirs.length > 1) {
-      childProcess.execSync("sox -m " + this.wavDirs.join(" ") + " " + webDirname + "output.wav")
+      childProcess.execSync(
+        "sox -m " + this.wavDirs.join(" ") + " " + webDirname + "output.wav"
+      );
     }
-    guildChannel.delete()
-    textChannel.delete()
-    category.delete()
-    this.client.destroy()
+    guildChannel.delete();
+    textChannel.delete();
+    category.delete();
+    this.client.destroy();
 
     //console.log(botToken)
   }
 
-  startRecord (botToken, firstPlayerID, secondPlayerID, guildId, callback) {
-    this.client = new Discord.Client()
+  startRecord(botToken, firstPlayerID, secondPlayerID, guildId, callback) {
+    this.client = new Discord.Client();
 
-    this.token = botToken
-    this.guildId = guildId
-    this.client.login(this.token)
+    this.token = botToken;
+    this.guildId = guildId;
+    this.client.login(this.token);
     this.questions = fs
-      .readFileSync('questions.txt')
+      .readFileSync("questions.txt")
       .toString()
-      .split('\r\n')
-    var that = this
+      .split("\r\n");
+    var that = this;
 
-    this.client.on('ready', () => {
-      console.log('Recorder ready')
+    this.client.on("ready", () => {
+      console.log("Recorder ready");
 
-      that.firstPlayer = that.client.users.resolve(firstPlayerID)
+      that.firstPlayer = that.client.users.resolve(firstPlayerID);
       that.firstMember = that.client.guilds
         .resolve(that.guildId)
-        .members.resolve(that.firstPlayer)
+        .members.resolve(that.firstPlayer);
 
-      that.secondPlayer = that.client.users.resolve(secondPlayerID)
+      that.secondPlayer = that.client.users.resolve(secondPlayerID);
       that.secondMember = that.client.guilds
         .resolve(that.guildId)
-        .members.resolve(that.secondPlayer)
+        .members.resolve(that.secondPlayer);
 
-      new Promise(function (resolve, reject) {
+      new Promise(function(resolve, reject) {
         //console.log(that)
-        var localGuild = that.firstMember.guild
-        var channelName = that.firstPlayer.tag + ' ' + that.secondPlayer.tag
+        var localGuild = that.firstMember.guild;
+        var channelName = that.firstPlayer.tag + " " + that.secondPlayer.tag;
         localGuild.channels
           .create(channelName, {
-            type: 'category'
+            type: "category"
           })
           .then(category => {
             localGuild.channels
               .create(channelName, {
-                type: 'voice',
+                type: "voice",
                 permissionOverwrites: [
                   {
                     id: localGuild.roles.everyone,
                     deny: [
-                      'CONNECT',
-                      'CREATE_INSTANT_INVITE',
-                      'VIEW_CHANNEL',
-                      'SPEAK'
+                      "CONNECT",
+                      "CREATE_INSTANT_INVITE",
+                      "VIEW_CHANNEL",
+                      "SPEAK"
                     ]
                   },
                   {
                     id: that.firstPlayer.id,
-                    allow: ['CONNECT', 'VIEW_CHANNEL', 'SPEAK']
+                    allow: ["CONNECT", "VIEW_CHANNEL", "SPEAK"]
                   },
                   {
                     id: that.secondPlayer.id,
-                    allow: ['CONNECT', 'VIEW_CHANNEL', 'SPEAK']
+                    allow: ["CONNECT", "VIEW_CHANNEL", "SPEAK"]
                   }
                 ]
               })
               .then(guildChannel => {
-                var startTime = Date.now()
-                guildChannel.setParent(category)
-                console.log('New voice channel created!')
+                var startTime = Date.now();
+                guildChannel.setParent(category);
+                console.log("New voice channel created!");
                 localGuild.channels
                   .create(channelName, {
-                    type: 'text',
+                    type: "text",
                     permissionOverwrites: [
                       {
                         id: localGuild.roles.everyone,
                         deny: [
-                          'CREATE_INSTANT_INVITE',
-                          'READ_MESSAGE_HISTORY',
-                          'SEND_MESSAGES',
-                          'VIEW_CHANNEL'
+                          "CREATE_INSTANT_INVITE",
+                          "READ_MESSAGE_HISTORY",
+                          "SEND_MESSAGES",
+                          "VIEW_CHANNEL"
                         ]
                       },
                       {
                         id: that.firstPlayer.id,
                         allow: [
-                          'READ_MESSAGE_HISTORY',
-                          'SEND_MESSAGES',
-                          'VIEW_CHANNEL'
+                          "READ_MESSAGE_HISTORY",
+                          "SEND_MESSAGES",
+                          "VIEW_CHANNEL"
                         ]
                       },
                       {
                         id: that.secondPlayer.id,
                         allow: [
-                          'READ_MESSAGE_HISTORY',
-                          'SEND_MESSAGES',
-                          'VIEW_CHANNEL'
+                          "READ_MESSAGE_HISTORY",
+                          "SEND_MESSAGES",
+                          "VIEW_CHANNEL"
                         ]
                       },
                       {
                         id: that.client.user.id,
                         allow: [
-                          'READ_MESSAGE_HISTORY',
-                          'SEND_MESSAGES',
-                          'VIEW_CHANNEL'
+                          "READ_MESSAGE_HISTORY",
+                          "SEND_MESSAGES",
+                          "VIEW_CHANNEL"
                         ]
                       }
                     ]
                   })
                   .then(textChannel => {
-                    textChannel.setParent(category)
-                    console.log('New text channel created!')
+                    textChannel.setParent(category);
+                    console.log("New text channel created!");
 
                     that.client.voice.joinChannel(guildChannel).then(conn => {
                       var dirname =
-                        './recordings/' +
+                        "./recordings/" +
                         that.firstPlayer.tag +
-                        '-' +
+                        "-" +
                         that.secondPlayer.tag +
-                        '-' +
-                        Date.now()
+                        "-" +
+                        Date.now();
 
                       var dirnameFirstPlayer =
-                        dirname + '/' + that.firstPlayer.tag
+                        dirname + "/" + that.firstPlayer.tag;
                       var dirnameSecondPlayer =
-                        dirname + '/' + that.secondPlayer.tag
+                        dirname + "/" + that.secondPlayer.tag;
 
-                      mkdirp.sync(dirname)
-                      mkdirp.sync(dirnameFirstPlayer)
-                      mkdirp.sync(dirnameSecondPlayer)
+                      mkdirp.sync(dirname);
+                      mkdirp.sync(dirnameFirstPlayer);
+                      mkdirp.sync(dirnameSecondPlayer);
+                      that.recordedVoices = [];
+                      that.connectToVoiceChat(that.firstMember, guildChannel);
+                      that.connectToVoiceChat(that.secondMember, guildChannel);
 
-                      that.connectToVoiceChat(that.firstMember, guildChannel)
-                      that.connectToVoiceChat(that.secondMember, guildChannel)
-
-                      var questionCounter = 0
-                      var usedNumbers = []
-                      var firstTurn = true
-                      var firstInGame, secondInGame, nextPlayer
-
-                      /*
-                      var playerChunks = {
-                        firstPlayerChunk: 0,
-                        secondPlayerChunk: 0
-                      }
-                      */
-
-                      var playerChunks = new Map()
-                      var silenceChunks = new Map()
-                      textChannel.send(prompts.textConnect)
+                      var questionCounter = 0;
+                      var usedNumbers = [];
+                      var firstTurn = true;
+                      var firstInGame, secondInGame, nextPlayer;
+                      var nextQuestion;
+                      var playerChunks = new Map();
+                      var silenceChunks = new Map();
+                      textChannel.send(prompts.textConnect);
 
                       that.client.on(
-                        'voiceStateUpdate',
+                        "voiceStateUpdate",
                         (oldState, newState) => {
                           try {
-                            conn.play(new Silence(), { type: 'opus' })
+                            conn.play(new Silence(), { type: "opus" });
                           } catch (error) {
-                            console.log('Trying to connect recorder')
+                            console.log("Trying to connect recorder");
                           }
 
                           if (
@@ -254,7 +245,7 @@ module.exports = class Recorder {
                                 guildChannel,
                                 textChannel,
                                 category
-                              )
+                              );
 
                               resolve({
                                 token: botToken,
@@ -263,55 +254,37 @@ module.exports = class Recorder {
                                 secondP: that.secondPlayer,
                                 firstM: that.firstMember,
                                 secondM: that.secondMember
-                              })
+                              });
                             }
                           }
                         }
-                      )
+                      );
 
-                      var silenceTiming = new Map()
-                      conn.on('speaking', (user, state) => {
+                      var silenceTiming = new Map();
+                      conn.on("speaking", (user, state) => {
                         if (
                           state.bitfield != 0 &&
                           user &&
                           user.id != that.client.user.id
                         ) {
-                          /*
-                          var chunkCounter = 0
-                          if (user.id == that.firstPlayer.id) {
-                            playerChunks.firstPlayerChunk += 1
-                            chunkCounter = playerChunks.firstPlayerChunk
-                          }
-
-                          if (user.id == that.secondPlayer.id) {
-                            playerChunks.secondPlayerChunk += 1
-                            chunkCounter = playerChunks.secondPlayerChunk
-                          }
-                          */
-                          //console.log(state)
-
                           if (silenceTiming.has(user.tag)) {
                             silenceTiming.set(
                               user.tag,
                               (Date.now() - silenceTiming.get(user.tag)) / 1000
-                            )
+                            );
                           } else {
                             silenceTiming.set(
                               user.tag,
                               (Date.now() - startTime) / 1000
-                            )
-                            console.log(
-                              'From start: ' + (Date.now() - startTime) / 1000
-                            )
+                            );
                           }
 
-                          if (!playerChunks.has(user.tag)) {
-                            playerChunks.set(user.tag, 0)
-                          } else {
-                            playerChunks.set(
-                              user.tag,
-                              playerChunks.get(user.tag) + 1
-                            )
+                          if (that.recordedVoices.indexOf(user) <= -1) {
+                            that.recordedVoices.push(user);
+                          }
+
+                          if (!fs.existsSync(dirname + "/" + user.tag)) {
+                            mkdirp.sync(dirname + "/" + user.tag);
                           }
 
                           var encoder = new lame.Encoder({
@@ -322,17 +295,18 @@ module.exports = class Recorder {
                             bitRate: 128,
                             outSampleRate: 44100,
                             mode: lame.STEREO
-                          })
+                          });
 
                           let audio = conn.receiver.createStream(user, {
-                            mode: 'pcm'
-                          })
-                          audio.pipe(encoder)
+                            mode: "pcm"
+                          });
+
+                          audio.pipe(encoder);
                           encoder.pipe(
                             fs.createWriteStream(
-                              dirname + '/' + user.tag + '/recorded.mp3'
+                              dirname + "/" + user.tag + "/recorded.mp3"
                             )
-                          )
+                          );
                         }
 
                         if (
@@ -341,139 +315,140 @@ module.exports = class Recorder {
                           user.id != that.client.user.id
                         ) {
                           if (silenceTiming.has(user.tag)) {
-                            var silenceTime = silenceTiming.get(user.tag)
-                            console.log(
-                              'sox -n -r 44100 -c 2 ' +
-                                dirname +
-                                '/' +
-                                user.tag +
-                                '/silence.wav trim 0.0 ' +
-                                silenceTime
-                            )
-                            childProcess.execSync(
-                              'sox -n -r 44100 -c 2 ' +
-                                dirname +
-                                '/' +
-                                user.tag +
-                                '/silence.wav trim 0.0 ' +
-                                silenceTime
-                            )
+                            var silenceTime = silenceTiming.get(user.tag);
+                            childProcess
+                              .execSync(
+                                "sox -n -r 44100 -c 2 " +
+                                  dirname +
+                                  "/" +
+                                  user.tag +
+                                  "/silence.wav trim 0.0 " +
+                                  silenceTime
+                              )
+                              .toString();
                             var silencePath =
-                              dirname + '/' + user.tag + '/silence.wav'
+                              dirname + "/" + user.tag + "/silence.wav";
                             var recordedPath =
-                              dirname + '/' + user.tag + '/recorded.mp3'
+                              dirname + "/" + user.tag + "/recorded.mp3";
                             var outputPath =
-                              dirname + '/' + user.tag + '/output.wav'
+                              dirname + "/" + user.tag + "/output.wav";
 
                             var outputPath2 =
-                              dirname + '/' + user.tag + '/output2.wav'
+                              dirname + "/" + user.tag + "/output2.wav";
 
                             if (!fs.existsSync(outputPath)) {
-                              childProcess.execSync(
-                                'sox ' +
-                                  silencePath +
-                                  ' ' +
-                                  recordedPath +
-                                  ' ' +
-                                  outputPath
-                              )
+                              childProcess
+                                .execSync(
+                                  "sox " +
+                                    silencePath +
+                                    " " +
+                                    recordedPath +
+                                    " " +
+                                    outputPath
+                                )
+                                .toString();
                             } else {
-                              fs.copyFileSync(outputPath, outputPath2)
-                              childProcess.execSync(
-                                'sox ' +
-                                  outputPath2 +
-                                  ' ' +
-                                  silencePath +
-                                  ' ' +
-                                  recordedPath +
-                                  ' ' +
-                                  outputPath
-                              )
+                              fs.copyFileSync(outputPath, outputPath2);
+                              childProcess
+                                .execSync(
+                                  "sox " +
+                                    outputPath2 +
+                                    " " +
+                                    silencePath +
+                                    " " +
+                                    recordedPath +
+                                    " " +
+                                    outputPath
+                                )
+                                .toString();
                             }
                           }
 
-                          silenceTiming.set(user.tag, Date.now())
+                          silenceTiming.set(user.tag, Date.now());
                         }
-                      })
+                      });
 
-                      that.client.on('message', msg => {
+                      that.client.on("message", msg => {
                         if (
-                          msg.content.startsWith(config.prefix + 'finish') &&
+                          msg.content.startsWith(config.prefix + "finish") &&
                           msg.channel.id == textChannel.id
                         ) {
-                          that.connectToVoiceChat(that.firstMember, null)
-                          that.connectToVoiceChat(that.secondMember, null)
+                          that.connectToVoiceChat(that.firstMember, null);
+                          that.connectToVoiceChat(that.secondMember, null);
                         }
 
                         if (
-                          msg.content.startsWith(config.prefix + 'restart') &&
+                          msg.content.startsWith(config.prefix + "restart") &&
                           msg.channel.id == textChannel.id
                         ) {
-                          questionCounter = 0
-                          usedNumbers = []
-                          textChannel.send(
-                            'Game Restarted , ' +
-                              msg.author.tag +
-                              ', type /next'
-                          )
-                          firstTurn = true
+                          questionCounter = 0;
+                          usedNumbers = [];
+                          textChannel.send(prompt.restarted);
+                          firstTurn = true;
                         }
 
                         if (
-                          msg.content.startsWith(config.prefix + 'next') &&
+                          msg.content.startsWith(config.prefix + "next") &&
                           msg.channel.id == textChannel.id &&
                           (firstTurn || nextPlayer.id == msg.author.id)
                         ) {
                           if (firstTurn) {
                             if (msg.author == that.firstPlayer) {
-                              firstInGame = that.firstPlayer
-                              secondInGame = that.secondPlayer
+                              firstInGame = that.firstPlayer;
+                              secondInGame = that.secondPlayer;
                             } else {
-                              firstInGame = that.secondPlayer
-                              secondInGame = that.firstPlayer
+                              firstInGame = that.secondPlayer;
+                              secondInGame = that.firstPlayer;
                             }
 
-                            nextPlayer = secondInGame
-                            firstTurn = false
+                            nextPlayer = secondInGame;
+                            firstTurn = false;
                           }
 
                           if (nextPlayer.id != firstInGame.id) {
-                            nextPlayer = firstInGame
-                            questionCounter += 1
+                            nextPlayer = firstInGame;
+                            questionCounter += 1;
+
+                            do {
+                              nextQuestion = that.getRandomInt(
+                                0,
+                                that.questions.length
+                              );
+                            } while (usedNumbers.includes(nextQuestion));
                           } else {
-                            nextPlayer = secondInGame
+                            nextPlayer = secondInGame;
                           }
 
                           if (questionCounter == 6) {
-                            textChannel.send(prompts.noMoreQuestions)
-                            return
+                            textChannel.send(prompts.noMoreQuestions);
+                            return;
                           }
 
-                          var nextQuestion
-                          do {
-                            nextQuestion = that.getRandomInt(
-                              0,
-                              that.questions.length
-                            )
-                          } while (usedNumbers.includes(nextQuestion))
-                          usedNumbers.push(nextQuestion)
+                          usedNumbers.push(nextQuestion);
 
-                          textChannel.send(nextPlayer.tag + ' turn!')
                           textChannel.send(
-                            'Question #' +
-                              questionCounter +
-                              ' is: ' +
-                              that.questions[nextQuestion]
-                          )
+                            prompts.playerTurn.replace(
+                              "${player}",
+                              nextPlayer.tag
+                            )
+                          );
+                          textChannel.send(
+                            prompts.question
+                              .replace("${number}", questionCounter)
+                              .replace(
+                                "${question}",
+                                that.questions[nextQuestion]
+                              )
+                          );
                         }
-                      })
-                    })
-                  })
-              })
-          })
+                      });
+                    });
+                  });
+              });
+          });
       }).then(result => {
-        callback(result)
-      })
-    })
+        callback(result);
+      });
+    });
   }
-}
+};
