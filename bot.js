@@ -14,7 +14,7 @@ prompts = {
   restarted: "Game Restarted, type /next",
   playerTurn: "Player ${player} turn",
   question: "Question #${number}: ${question}",
-  instructions: "There are 3 steps you’ll need to do in order to start the game: 1) click the voice channel on the left to join the audio channel with the other player, 2) unmute your mic so the other player can hear you, 3) click the text channel above the voice channel to see the game instructions."
+  instructions: "There are 3 steps you’ll need to do in order to start the game:\n 1) click the voice channel on the left to join the audio channel with the other player, \n2) unmute your mic so the other player can hear you, \n3) click the text channel above the voice channel to see the game instructions."
 };
 
 process.on("unhandledRejection", ex => {
