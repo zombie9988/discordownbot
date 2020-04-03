@@ -24,10 +24,10 @@ module.exports = class Recorder {
         .setChannel(channel)
         .then(member => {})
         .catch(err => {
-          console.log("Can't connect user to channel");
+          console.log("Unable to automatically join a member.");
         });
     } catch (error) {
-      console.log("Can't connect user to channel");
+      console.log("Unable to automatically join a member.");
     }
   }
 
@@ -84,7 +84,14 @@ module.exports = class Recorder {
     //console.log(botToken)
   }
 
-  startRecord(botToken, firstPlayerID, secondPlayerID, guildId, callback) {
+  startRecord(
+    botToken,
+    firstPlayerID,
+    secondPlayerID,
+    guildId,
+    callback,
+    outTextChannel
+  ) {
     this.client = new Discord.Client();
 
     this.token = botToken;
@@ -209,15 +216,17 @@ module.exports = class Recorder {
                       that.connectToVoiceChat(that.firstMember, guildChannel);
                       that.connectToVoiceChat(that.secondMember, guildChannel);
 
-                      var questionCounter = 0;
-                      var usedNumbers = [];
-                      var firstTurn = true;
-                      var firstInGame, secondInGame, nextPlayer;
-                      var nextQuestion;
-                      var playerChunks = new Map();
-                      var silenceChunks = new Map();
-                      textChannel.send(prompts.textConnect);
+                      outTextChannel.send(prompts.instructions);
+                      that.questionCounter = 0;
+                      that.usedNumbers = [];
 
+                      that.firstInGame = that.firstPlayer;
+                      that.secondInGame = that.secondPlayer;
+                      that.nextPlayer = that.secondInGame;
+                      
+                      that.nextQuestion = "";
+                      textChannel.send(prompts.textConnect);
+                      that.askQuestion(textChannel);
                       that.client.on(
                         "voiceStateUpdate",
                         (oldState, newState) => {
@@ -390,65 +399,21 @@ module.exports = class Recorder {
                           msg.content.startsWith(config.prefix + "restart") &&
                           msg.channel.id == textChannel.id
                         ) {
-                          questionCounter = 0;
-                          usedNumbers = [];
-                          textChannel.send(prompt.restarted);
-                          firstTurn = true;
+                          that.questionCounter = 0;
+                          that.usedNumbers = [];
+                          textChannel.send(prompts.restarted);
+                          that.firstInGame = that.firstPlayer;
+                          that.secondInGame = that.secondPlayer;
+                          that.nextPlayer = that.secondInGame;
+                          that.askQuestion(textChannel);
                         }
 
                         if (
                           msg.content.startsWith(config.prefix + "next") &&
                           msg.channel.id == textChannel.id &&
-                          (firstTurn || nextPlayer.id == msg.author.id)
+                          (that.nextPlayer.id == msg.author.id)
                         ) {
-                          if (firstTurn) {
-                            if (msg.author == that.firstPlayer) {
-                              firstInGame = that.firstPlayer;
-                              secondInGame = that.secondPlayer;
-                            } else {
-                              firstInGame = that.secondPlayer;
-                              secondInGame = that.firstPlayer;
-                            }
-
-                            nextPlayer = secondInGame;
-                            firstTurn = false;
-                          }
-
-                          if (nextPlayer.id != firstInGame.id) {
-                            nextPlayer = firstInGame;
-                            questionCounter += 1;
-
-                            do {
-                              nextQuestion = that.getRandomInt(
-                                0,
-                                that.questions.length
-                              );
-                            } while (usedNumbers.includes(nextQuestion));
-                          } else {
-                            nextPlayer = secondInGame;
-                          }
-
-                          if (questionCounter == 6) {
-                            textChannel.send(prompts.noMoreQuestions);
-                            return;
-                          }
-
-                          usedNumbers.push(nextQuestion);
-
-                          textChannel.send(
-                            prompts.playerTurn.replace(
-                              "${player}",
-                              nextPlayer.tag
-                            )
-                          );
-                          textChannel.send(
-                            prompts.question
-                              .replace("${number}", questionCounter)
-                              .replace(
-                                "${question}",
-                                that.questions[nextQuestion]
-                              )
-                          );
+                          that.askQuestion(textChannel);
                         }
                       });
                     });
@@ -459,5 +424,43 @@ module.exports = class Recorder {
         callback(result);
       });
     });
+  }
+
+  askQuestion(textChannel) {
+    if (this.nextPlayer.id != this.firstInGame.id) {
+      this.nextPlayer = this.firstInGame;
+      this.questionCounter += 1;
+
+      do {
+        this.nextQuestion = this.getRandomInt(
+          0,
+          this.questions.length
+        );
+      } while (this.usedNumbers.includes(this.nextQuestion));
+    } else {
+      this.nextPlayer = this.secondInGame;
+    }
+
+    if (this.questionCounter == 6) {
+      textChannel.send(prompts.noMoreQuestions);
+      return;
+    }
+
+    this.usedNumbers.push(this.nextQuestion);
+
+    textChannel.send(
+      prompts.playerTurn.replace(
+        "${player}",
+        this.nextPlayer.tag
+      )
+    );
+    textChannel.send(
+      prompts.question
+        .replace("${number}", this.questionCounter)
+        .replace(
+          "${question}",
+          this.questions[this.nextQuestion]
+        )
+    );
   }
 };

@@ -50,7 +50,8 @@ module.exports = class Listener {
         this.firstPlayer.id,
         this.secondPlayer.id,
         this.guildId,
-        inputData => this.askQuestions(inputData)
+        inputData => this.askQuestions(inputData),
+        msg.channel
       );
     }
   }
@@ -122,7 +123,7 @@ module.exports = class Listener {
                   dmChannel.send(prompts.finishPlaying);
 
                   fs.appendFileSync(
-                    dirname + "/feedback.csv",
+                    "/var/www/html/" + dirname + "/feedback.csv",
                     `${player.tag},${playerRate},${playerFeedback}\n`
                   );
                 });
