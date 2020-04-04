@@ -22,8 +22,8 @@ module.exports = class Recorder {
     try {
       member.voice
         .setChannel(channel)
-        .then(member => {})
-        .catch(err => {
+        .then((member) => {})
+        .catch((err) => {
           console.log("Unable to automatically join a member.");
         });
     } catch (error) {
@@ -32,19 +32,12 @@ module.exports = class Recorder {
   }
 
   saveResults(player, dirname) {
-    var webDirname = "/var/www/html/" + dirname + "/" + player.tag;
     var dirnamePlayer = dirname + "/" + player.tag;
 
-    try {
-      mkdirp.sync(webDirname);
-      fs.copyFileSync(
-        dirnamePlayer + "/output.wav",
-        webDirname + "/output.wav"
-      );
+    if (fs.existsSync(dirnamePlayer + "/output.wav")) {
       this.wavDirs.push(dirnamePlayer + "/output.wav");
-    } catch (error) {
+    } else {
       console.log("No audio for " + player.tag);
-      console.log(error);
     }
   }
 
@@ -58,9 +51,7 @@ module.exports = class Recorder {
   ) {
     this.wavDirs = [];
     var that = this;
-    var webDirname = "/var/www/html/" + dirname + "/";
-    mkdirp.sync(webDirname);
-    this.recordedVoices.forEach(user => {
+    this.recordedVoices.forEach((user) => {
       that.saveResults(user, dirname);
     });
     var allText = " ";
@@ -69,12 +60,11 @@ module.exports = class Recorder {
     });
     //this.saveResults(firstPlayer, dirname)
     //this.saveResults(secondPlayer, dirname)
-    
+
     fs.writeFileSync(`${dirname}/chat.txt`, allText);
-    fs.copyFileSync(`${dirname}/chat.txt`, `${webDirname}/chat.txt`);
     if (this.wavDirs.length > 1) {
       childProcess.execSync(
-        "sox -m " + this.wavDirs.join(" ") + " " + webDirname + "output.wav"
+        "sox -m " + this.wavDirs.join(" ") + " " + dirname + "/output.wav"
       );
     }
     guildChannel.delete();
@@ -98,10 +88,7 @@ module.exports = class Recorder {
     this.token = botToken;
     this.guildId = guildId;
     this.client.login(this.token);
-    this.questions = fs
-      .readFileSync("questions.txt")
-      .toString()
-      .split("\r\n");
+    this.questions = fs.readFileSync("questions.txt").toString().split("\r\n");
     var that = this;
 
     this.client.on("ready", () => {
@@ -117,15 +104,15 @@ module.exports = class Recorder {
         .resolve(that.guildId)
         .members.resolve(that.secondPlayer);
 
-      new Promise(function(resolve, reject) {
+      new Promise(function (resolve, reject) {
         //console.log(that)
         var localGuild = that.firstMember.guild;
         var channelName = that.firstPlayer.tag + " " + that.secondPlayer.tag;
         localGuild.channels
           .create(channelName, {
-            type: "category"
+            type: "category",
           })
-          .then(category => {
+          .then((category) => {
             localGuild.channels
               .create(channelName, {
                 type: "voice",
@@ -136,20 +123,20 @@ module.exports = class Recorder {
                       "CONNECT",
                       "CREATE_INSTANT_INVITE",
                       "VIEW_CHANNEL",
-                      "SPEAK"
-                    ]
+                      "SPEAK",
+                    ],
                   },
                   {
                     id: that.firstPlayer.id,
-                    allow: ["CONNECT", "VIEW_CHANNEL", "SPEAK"]
+                    allow: ["CONNECT", "VIEW_CHANNEL", "SPEAK"],
                   },
                   {
                     id: that.secondPlayer.id,
-                    allow: ["CONNECT", "VIEW_CHANNEL", "SPEAK"]
-                  }
-                ]
+                    allow: ["CONNECT", "VIEW_CHANNEL", "SPEAK"],
+                  },
+                ],
               })
-              .then(guildChannel => {
+              .then((guildChannel) => {
                 var startTime = Date.now();
                 guildChannel.setParent(category);
                 console.log("New voice channel created!");
@@ -163,40 +150,40 @@ module.exports = class Recorder {
                           "CREATE_INSTANT_INVITE",
                           "READ_MESSAGE_HISTORY",
                           "SEND_MESSAGES",
-                          "VIEW_CHANNEL"
-                        ]
+                          "VIEW_CHANNEL",
+                        ],
                       },
                       {
                         id: that.firstPlayer.id,
                         allow: [
                           "READ_MESSAGE_HISTORY",
                           "SEND_MESSAGES",
-                          "VIEW_CHANNEL"
-                        ]
+                          "VIEW_CHANNEL",
+                        ],
                       },
                       {
                         id: that.secondPlayer.id,
                         allow: [
                           "READ_MESSAGE_HISTORY",
                           "SEND_MESSAGES",
-                          "VIEW_CHANNEL"
-                        ]
+                          "VIEW_CHANNEL",
+                        ],
                       },
                       {
                         id: that.client.user.id,
                         allow: [
                           "READ_MESSAGE_HISTORY",
                           "SEND_MESSAGES",
-                          "VIEW_CHANNEL"
-                        ]
-                      }
-                    ]
+                          "VIEW_CHANNEL",
+                        ],
+                      },
+                    ],
                   })
-                  .then(textChannel => {
+                  .then((textChannel) => {
                     textChannel.setParent(category);
                     console.log("New text channel created!");
                     that.chatHistory = [];
-                    that.client.voice.joinChannel(guildChannel).then(conn => {
+                    that.client.voice.joinChannel(guildChannel).then((conn) => {
                       var dirname =
                         "./recordings/" +
                         that.firstPlayer.tag +
@@ -224,7 +211,7 @@ module.exports = class Recorder {
                       that.firstInGame = that.firstPlayer;
                       that.secondInGame = that.secondPlayer;
                       that.nextPlayer = that.secondInGame;
-                      
+
                       that.nextQuestion = "";
                       that.askQuestion(textChannel);
                       textChannel.send(prompts.textConnect);
@@ -246,10 +233,10 @@ module.exports = class Recorder {
                               newState.channelID != guildChannel.id &&
                               !(
                                 guildChannel.members.find(
-                                  u => u.id == that.firstMember.id
+                                  (u) => u.id == that.firstMember.id
                                 ) ||
                                 guildChannel.members.find(
-                                  u => u.id == that.secondMember.id
+                                  (u) => u.id == that.secondMember.id
                                 )
                               )
                             ) {
@@ -268,7 +255,7 @@ module.exports = class Recorder {
                                 firstP: that.firstPlayer,
                                 secondP: that.secondPlayer,
                                 firstM: that.firstMember,
-                                secondM: that.secondMember
+                                secondM: that.secondMember,
                               });
                             }
                           }
@@ -309,11 +296,11 @@ module.exports = class Recorder {
 
                             bitRate: 128,
                             outSampleRate: 44100,
-                            mode: lame.STEREO
+                            mode: lame.STEREO,
                           });
 
                           let audio = conn.receiver.createStream(user, {
-                            mode: "pcm"
+                            mode: "pcm",
                           });
 
                           audio.pipe(encoder);
@@ -383,7 +370,7 @@ module.exports = class Recorder {
                         }
                       });
 
-                      that.client.on("message", msg => {
+                      that.client.on("message", (msg) => {
                         that.chatHistory.push(
                           `${msg.author.tag}: ${msg.content}`
                         );
@@ -412,7 +399,7 @@ module.exports = class Recorder {
                         if (
                           msg.content.startsWith(config.prefix + "next") &&
                           msg.channel.id == textChannel.id &&
-                          (that.nextPlayer.id == msg.author.id)
+                          that.nextPlayer.id == msg.author.id
                         ) {
                           that.askQuestion(textChannel);
                         }
@@ -421,7 +408,7 @@ module.exports = class Recorder {
                   });
               });
           });
-      }).then(result => {
+      }).then((result) => {
         callback(result);
       });
     });
@@ -433,10 +420,7 @@ module.exports = class Recorder {
       this.questionCounter += 1;
 
       do {
-        this.nextQuestion = this.getRandomInt(
-          0,
-          this.questions.length
-        );
+        this.nextQuestion = this.getRandomInt(0, this.questions.length);
       } while (this.usedNumbers.includes(this.nextQuestion));
     } else {
       this.nextPlayer = this.secondInGame;
@@ -450,18 +434,12 @@ module.exports = class Recorder {
     this.usedNumbers.push(this.nextQuestion);
 
     textChannel.send(
-      prompts.playerTurn.replace(
-        "${player}",
-        this.nextPlayer.tag
-      )
+      prompts.playerTurn.replace("${player}", this.nextPlayer.tag)
     );
     textChannel.send(
       prompts.question
         .replace("${number}", this.questionCounter)
-        .replace(
-          "${question}",
-          this.questions[this.nextQuestion]
-        )
+        .replace("${question}", this.questions[this.nextQuestion])
     );
   }
 };

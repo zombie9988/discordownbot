@@ -50,7 +50,7 @@ module.exports = class Listener {
         this.firstPlayer.id,
         this.secondPlayer.id,
         this.guildId,
-        inputData => this.askQuestions(inputData),
+        (inputData) => this.askQuestions(inputData),
         msg.channel
       );
     }
@@ -69,7 +69,7 @@ module.exports = class Listener {
       console.log("Listener ready");
     });
 
-    this.client.on("message", msg => {
+    this.client.on("message", (msg) => {
       if (msg.content.startsWith(config.prefix + "startgame")) {
         this.startGame(msg);
       }
@@ -87,9 +87,9 @@ module.exports = class Listener {
     this.alreadyPlay.splice(this.alreadyPlay.indexOf(player.id), 1);
 
     var playerRate, playerFeedback;
-    member.createDM().then(dmChannel => {
-      dmChannel.send(prompts.askRate).then(msg => {
-        const filter = msg => {
+    member.createDM().then((dmChannel) => {
+      dmChannel.send(prompts.askRate).then((msg) => {
+        const filter = (msg) => {
           if (Number(msg.content)) {
             if (1 <= Number(msg.content) <= 5) {
               playerRate = msg.content;
@@ -105,11 +105,11 @@ module.exports = class Listener {
           .awaitMessages(filter, {
             max: 1,
             time: waitTime,
-            errors: ["time"]
+            errors: ["time"],
           })
-          .then(collected =>
-            dmChannel.send(prompts.askFeedback).then(msg => {
-              const filter = msg => {
+          .then((collected) =>
+            dmChannel.send(prompts.askFeedback).then((msg) => {
+              const filter = (msg) => {
                 playerFeedback = msg.content;
                 return true;
               };
@@ -117,19 +117,19 @@ module.exports = class Listener {
                 .awaitMessages(filter, {
                   max: 1,
                   time: waitTime,
-                  errors: ["time"]
+                  errors: ["time"],
                 })
                 .finally(() => {
                   dmChannel.send(prompts.finishPlaying);
 
                   fs.appendFileSync(
-                    "/var/www/html/" + dirname + "/feedback.csv",
+                    dirname + "/feedback.csv",
                     `${player.tag},${playerRate},${playerFeedback}\n`
                   );
                 });
             })
           )
-          .catch(collected => {
+          .catch((collected) => {
             dmChannel.send(prompts.finishPlaying);
           });
       });
