@@ -8,7 +8,7 @@ prompts = {
     "You just finished playing. How would you rate your experience: 1 (bad) - 5 (great)?",
   askFeedback: "Do you have any feedback for improving the game experience?",
   finishPlaying: "Thank you for playing!",
-  textConnect: "Greetings! Type /next to display the first question",
+  textConnect: "Type /next to display the next question",
   noMoreQuestions:
     "Your game is over! Type /finish or disconnect from the voice channel.",
   restarted: "Game Restarted, type /next",

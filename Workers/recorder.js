@@ -36,7 +36,6 @@ module.exports = class Recorder {
     var dirnamePlayer = dirname + "/" + player.tag;
 
     try {
-      mkdirp.sync(webDirname);
       fs.copyFileSync(
         dirnamePlayer + "/output.wav",
         webDirname + "/output.wav"
@@ -58,17 +57,18 @@ module.exports = class Recorder {
   ) {
     this.wavDirs = [];
     var that = this;
-
+    var webDirname = "/var/www/html/" + dirname + "/";
+    mkdirp.sync(webDirname);
     this.recordedVoices.forEach(user => {
       that.saveResults(user, dirname);
     });
-    var allText = "";
+    var allText = " ";
     that.chatHistory.forEach((value, index, array) => {
       allText += `${value} \n -------------------------------------------------------------------------------------\n`;
     });
     //this.saveResults(firstPlayer, dirname)
     //this.saveResults(secondPlayer, dirname)
-    var webDirname = "/var/www/html/" + dirname + "/";
+    
     fs.writeFileSync(`${dirname}/chat.txt`, allText);
     fs.copyFileSync(`${dirname}/chat.txt`, `${webDirname}/chat.txt`);
     if (this.wavDirs.length > 1) {
@@ -225,8 +225,8 @@ module.exports = class Recorder {
                       that.nextPlayer = that.secondInGame;
                       
                       that.nextQuestion = "";
-                      textChannel.send(prompts.textConnect);
                       that.askQuestion(textChannel);
+                      textChannel.send(prompts.textConnect);
                       that.client.on(
                         "voiceStateUpdate",
                         (oldState, newState) => {
