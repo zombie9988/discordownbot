@@ -36,6 +36,7 @@ module.exports = class Recorder {
     var dirnamePlayer = dirname + "/" + player.tag;
 
     try {
+      mkdirp.sync(webDirname);
       fs.copyFileSync(
         dirnamePlayer + "/output.wav",
         webDirname + "/output.wav"
