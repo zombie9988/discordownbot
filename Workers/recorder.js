@@ -51,28 +51,29 @@ module.exports = class Recorder {
   ) {
     this.wavDirs = [];
     var that = this;
+
     this.recordedVoices.forEach((user) => {
       that.saveResults(user, dirname);
     });
+
     var allText = " ";
     that.chatHistory.forEach((value, index, array) => {
       allText += `${value} \n -------------------------------------------------------------------------------------\n`;
     });
-    //this.saveResults(firstPlayer, dirname)
-    //this.saveResults(secondPlayer, dirname)
 
     fs.writeFileSync(`${dirname}/chat.txt`, allText);
     if (this.wavDirs.length > 1) {
       childProcess.execSync(
         "sox -m " + this.wavDirs.join(" ") + " " + dirname + "/output.wav"
       );
+    } else if (this.wavDirs.length == 1){
+      fs.copyFileSync(this.wavDirs[0], `${dirname}/output.wav`);
     }
+
     guildChannel.delete();
     textChannel.delete();
     category.delete();
     this.client.destroy();
-
-    //console.log(botToken)
   }
 
   startRecord(
@@ -379,6 +380,34 @@ module.exports = class Recorder {
                           msg.content.startsWith(config.prefix + "finish") &&
                           msg.channel.id == textChannel.id
                         ) {
+                          if (
+                            !(
+                              guildChannel.members.find(
+                                (u) => u.id == that.firstMember.id
+                              ) ||
+                              guildChannel.members.find(
+                                (u) => u.id == that.secondMember.id
+                              )
+                            )
+                          ) {
+                            that.finishGame(
+                              that.firstPlayer,
+                              that.secondPlayer,
+                              dirname,
+                              guildChannel,
+                              textChannel,
+                              category
+                            );
+
+                            resolve({
+                              token: botToken,
+                              dir: dirname,
+                              firstP: that.firstPlayer,
+                              secondP: that.secondPlayer,
+                              firstM: that.firstMember,
+                              secondM: that.secondMember,
+                            });
+                          }
                           that.connectToVoiceChat(that.firstMember, null);
                           that.connectToVoiceChat(that.secondMember, null);
                         }
