@@ -176,7 +176,7 @@ module.exports = class Recorder {
             SPEAK: true,
           });
 
-          that.outTextChannel.send(prompts.instructions);
+          that.outTextChannel.send(" ", {files: ["./resources/images/image.png"]});
         })
         .catch(() => {
           that.outTextChannel.send(
@@ -310,7 +310,7 @@ module.exports = class Recorder {
 
                       that.recordedVoices = [];
 
-                      that.outTextChannel.send(prompts.instructions);
+                      that.outTextChannel.send(" ", {files: ["./resources/images/image.png"]});
                       that.questionCounter = 0;
                       that.usedNumbers = [];
 
