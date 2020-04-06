@@ -4,6 +4,7 @@ const lame = require("lame");
 const mkdirp = require("mkdirp");
 const childProcess = require("child_process");
 const { Readable } = require("stream");
+const EventEmitter = require("events");
 
 class Silence extends Readable {
   _read() {
@@ -11,8 +12,17 @@ class Silence extends Readable {
   }
 }
 
+class UsersEmmiter extends EventEmitter {}
+
 module.exports = class Recorder {
-  constructor() {}
+  constructor(guildId, outTextChannel) {
+    this.participantsArr = new Map();
+    this.rawPlayers = [];
+    this.maxPlayers = 4;
+    this.guildId = guildId;
+    this.outTextChannel = outTextChannel;
+    this.eventEmitter = new UsersEmmiter();
+  }
 
   getRandomInt(min, max) {
     return Math.floor(Math.random() * (max - min)) + min;
@@ -41,16 +51,21 @@ module.exports = class Recorder {
     }
   }
 
-  finishGame(
-    firstPlayer,
-    secondPlayer,
-    dirname,
-    guildChannel,
-    textChannel,
-    category
-  ) {
+  hasStarted() {
+    if (this.client == null) {
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  finishGame(dirname, guildChannel, textChannel, category) {
     this.wavDirs = [];
     var that = this;
+
+    if (!fs.existsSync(dirname)) {
+      mkdirp.sync(dirname);
+    }
 
     this.recordedVoices.forEach((user) => {
       that.saveResults(user, dirname);
@@ -66,7 +81,7 @@ module.exports = class Recorder {
       childProcess.execSync(
         "sox -m " + this.wavDirs.join(" ") + " " + dirname + "/output.wav"
       );
-    } else if (this.wavDirs.length == 1){
+    } else if (this.wavDirs.length == 1) {
       fs.copyFileSync(this.wavDirs[0], `${dirname}/output.wav`);
     }
 
@@ -76,18 +91,111 @@ module.exports = class Recorder {
     this.client.destroy();
   }
 
-  startRecord(
-    botToken,
-    firstPlayerID,
-    secondPlayerID,
-    guildId,
-    callback,
-    outTextChannel
-  ) {
-    this.client = new Discord.Client();
+  resolveMemberFromPlayer(player, guild) {
+    return {
+      player: this.client.users.resolve(player.id),
+      member: this.client.guilds
+        .resolve(guild)
+        .members.resolve(this.client.users.resolve(player.id)),
+    };
+  }
 
+  askPermission(player) {
+    var that = this;
+    this.localTextChannel.send(
+      prompts.wantToJoin.replace("${player}", player.tag)
+    );
+    return new Promise((resolve, reject) => {
+      that.localTextChannel.send(
+        prompts.wantToEnter.replace("${player}", player.tag)
+      );
+
+      that.eventEmitter.on(player.tag.slice(0, -5).toLowerCase(), (result) => {
+        if (result) {
+          resolve();
+        } else {
+          reject();
+        }
+      });
+    });
+  }
+
+  addParticipant(player, listener) {
+    if (this.client == null) {
+      if (!this.rawPlayers.includes(player)) {
+        this.rawPlayers.push(player);
+      }
+      if (this.rawPlayers.length == 2) {
+        return 1;
+      }
+
+      return 0;
+    }
+
+    if (this.rawPlayers.includes(player.tag.slice(0, -5).toLowerCase())) {
+      this.outTextChannel.send(prompts.alreadyRequested);
+      return 0;
+    }
+
+    if (this.participantsArr.size == this.maxPlayers) {
+      this.outTextChannel.send(prompts.maxPlayersAlready);
+      return 2; // 2 Is for max player riched
+    }
+
+    if (this.participantsArr.size >= 2) {
+      this.rawPlayers.push(player.tag.slice(0, -5).toLowerCase());
+      var that = this;
+      this.askPermission(player)
+        .then(() => {
+          var obj = that.resolveMemberFromPlayer(player, that.guildId);
+          that.participantsArr.set(player.tag, obj);
+          listener.alreadyPlay.set(player.tag.slice(0, -5).toLowerCase(), that);
+          let roomName = that.participantsArr.keys().next().value.slice(0, -5).toLowerCase();
+          listener.launchedRoom.set(roomName, listener.launchedRoom.get(roomName) + 1);
+          that.outTextChannel.send(
+            prompts.accept.replace("${player}", player.tag)
+          );
+          that.localTextChannel.overwritePermissions([
+            {
+              id: player.id,
+              allow: ["READ_MESSAGE_HISTORY", "SEND_MESSAGES", "VIEW_CHANNEL"],
+            },
+          ]);
+          that.localVoiceChannel.overwritePermissions([
+            {
+              id: player.id,
+              allow: ["CONNECT", "VIEW_CHANNEL", "SPEAK"],
+            },
+          ]);
+          that.outTextChannel.send(prompts.instructions);
+        })
+        .catch(() => {
+          that.outTextChannel.send(
+            prompts.decline.replace("${player}", player.tag)
+          );
+        });
+
+      return 0;
+    }
+
+    var obj = this.resolveMemberFromPlayer(player, this.guildId);
+    this.participantsArr.set(player.tag, obj);
+    listener.alreadyPlay.set(player.tag.slice(0, -5).toLowerCase(), this);
+    if (this.participantsArr.size == 1) {
+      this.firstPlayer = obj.player;
+    }
+
+    if (this.participantsArr.size == 2) {
+      this.secondPlayer = obj.player;
+      return 1; // 1 Is for create new recorder
+    }
+
+    return 0; // 0 Is for usual
+  }
+
+  startRecord(botToken, callback, listener) {
+    this.client = new Discord.Client();
     this.token = botToken;
-    this.guildId = guildId;
     this.client.login(this.token);
     this.questions = fs.readFileSync("questions.txt").toString().split("\r\n");
     var that = this;
@@ -95,19 +203,15 @@ module.exports = class Recorder {
     this.client.on("ready", () => {
       console.log("Recorder ready");
 
-      that.firstPlayer = that.client.users.resolve(firstPlayerID);
-      that.firstMember = that.client.guilds
-        .resolve(that.guildId)
-        .members.resolve(that.firstPlayer);
+      that.rawPlayers.forEach((value, index) => {
+        that.addParticipant(value, listener);
+      });
 
-      that.secondPlayer = that.client.users.resolve(secondPlayerID);
-      that.secondMember = that.client.guilds
-        .resolve(that.guildId)
-        .members.resolve(that.secondPlayer);
-
+      that.rawPlayers = [];
+      //console.log(that.participantsArr);
       new Promise(function (resolve, reject) {
-        //console.log(that)
-        var localGuild = that.firstMember.guild;
+        var localGuild = that.participantsArr.values().next().value.member
+          .guild;
         var channelName = that.firstPlayer.tag + " " + that.secondPlayer.tag;
         localGuild.channels
           .create(channelName, {
@@ -182,6 +286,8 @@ module.exports = class Recorder {
                   })
                   .then((textChannel) => {
                     textChannel.setParent(category);
+                    that.localTextChannel = textChannel;
+                    that.localVoiceChannel = guildChannel;
                     console.log("New text channel created!");
                     that.chatHistory = [];
                     that.client.voice.joinChannel(guildChannel).then((conn) => {
@@ -193,25 +299,11 @@ module.exports = class Recorder {
                         "-" +
                         Date.now();
 
-                      var dirnameFirstPlayer =
-                        dirname + "/" + that.firstPlayer.tag;
-                      var dirnameSecondPlayer =
-                        dirname + "/" + that.secondPlayer.tag;
-
-                      mkdirp.sync(dirname);
-                      mkdirp.sync(dirnameFirstPlayer);
-                      mkdirp.sync(dirnameSecondPlayer);
                       that.recordedVoices = [];
-                      that.connectToVoiceChat(that.firstMember, guildChannel);
-                      that.connectToVoiceChat(that.secondMember, guildChannel);
 
-                      outTextChannel.send(prompts.instructions);
+                      that.outTextChannel.send(prompts.instructions);
                       that.questionCounter = 0;
                       that.usedNumbers = [];
-
-                      that.firstInGame = that.firstPlayer;
-                      that.secondInGame = that.secondPlayer;
-                      that.nextPlayer = that.secondInGame;
 
                       that.nextQuestion = "";
                       that.askQuestion(textChannel);
@@ -225,25 +317,13 @@ module.exports = class Recorder {
                             console.log("Trying to connect recorder");
                           }
 
-                          if (
-                            oldState.member.id == that.firstPlayer ||
-                            oldState.member.id == that.secondPlayer
-                          ) {
+                          if (oldState.member.id != that.client.user.id) {
                             if (
                               oldState.channelID == guildChannel.id &&
                               newState.channelID != guildChannel.id &&
-                              !(
-                                guildChannel.members.find(
-                                  (u) => u.id == that.firstMember.id
-                                ) ||
-                                guildChannel.members.find(
-                                  (u) => u.id == that.secondMember.id
-                                )
-                              )
+                              guildChannel.members.length == 1
                             ) {
                               that.finishGame(
-                                that.firstPlayer,
-                                that.secondPlayer,
                                 dirname,
                                 guildChannel,
                                 textChannel,
@@ -253,10 +333,7 @@ module.exports = class Recorder {
                               resolve({
                                 token: botToken,
                                 dir: dirname,
-                                firstP: that.firstPlayer,
-                                secondP: that.secondPlayer,
-                                firstM: that.firstMember,
-                                secondM: that.secondMember,
+                                players: that.participantsArr,
                               });
                             }
                           }
@@ -372,27 +449,14 @@ module.exports = class Recorder {
                       });
 
                       that.client.on("message", (msg) => {
-                        that.chatHistory.push(
-                          `${msg.author.tag}: ${msg.content}`
-                        );
-
-                        if (
-                          msg.content.startsWith(config.prefix + "finish") &&
-                          msg.channel.id == textChannel.id
-                        ) {
+                        if (msg.channel.id == textChannel.id) {
+                          that.chatHistory.push(
+                            `${msg.author.tag}: ${msg.content}`
+                          );
                           if (
-                            !(
-                              guildChannel.members.find(
-                                (u) => u.id == that.firstMember.id
-                              ) ||
-                              guildChannel.members.find(
-                                (u) => u.id == that.secondMember.id
-                              )
-                            )
+                            msg.content.startsWith(config.prefix + "finish")
                           ) {
                             that.finishGame(
-                              that.firstPlayer,
-                              that.secondPlayer,
                               dirname,
                               guildChannel,
                               textChannel,
@@ -402,35 +466,94 @@ module.exports = class Recorder {
                             resolve({
                               token: botToken,
                               dir: dirname,
-                              firstP: that.firstPlayer,
-                              secondP: that.secondPlayer,
-                              firstM: that.firstMember,
-                              secondM: that.secondMember,
+                              players: that.participantsArr,
+                            });
+
+                            guildChannel.members.forEach((member) => {
+                              if (member.id != that.client.user.id) {
+                                that.connectToVoiceChat(member, null);
+                              }
                             });
                           }
-                          that.connectToVoiceChat(that.firstMember, null);
-                          that.connectToVoiceChat(that.secondMember, null);
-                        }
 
-                        if (
-                          msg.content.startsWith(config.prefix + "restart") &&
-                          msg.channel.id == textChannel.id
-                        ) {
-                          that.questionCounter = 0;
-                          that.usedNumbers = [];
-                          textChannel.send(prompts.restarted);
-                          that.firstInGame = that.firstPlayer;
-                          that.secondInGame = that.secondPlayer;
-                          that.nextPlayer = that.secondInGame;
-                          that.askQuestion(textChannel);
-                        }
+                          if (
+                            msg.content.startsWith(config.prefix + "restart")
+                          ) {
+                            that.questionCounter = 0;
+                            that.usedNumbers = [];
+                            textChannel.send(prompts.restarted);
+                            that.askQuestion(textChannel);
+                          }
 
-                        if (
-                          msg.content.startsWith(config.prefix + "next") &&
-                          msg.channel.id == textChannel.id &&
-                          that.nextPlayer.id == msg.author.id
-                        ) {
-                          that.askQuestion(textChannel);
+                          if (msg.content.startsWith(config.prefix + "next")) {
+                            that.askQuestion(textChannel);
+                          }
+
+                          if (
+                            msg.content.startsWith(config.prefix + "accept")
+                          ) {
+                            if (that.participantsArr.size == 4) {
+                              textChannel.send(prompts.maxPlayersAlready);
+                              return;
+                            }
+                            let args = msg.content.split(" ");
+
+                            if (args.length == 1) {
+                              let playersToAccept = that.rawPlayers.join("\n");
+                              textChannel.send(
+                                `List of players for accept:\n${playersToAccept}`
+                              );
+                            }
+
+                            if (args.length > 1) {
+                              let playerName = args[1];
+                              if (that.rawPlayers.includes(playerName)) {
+                                that.eventEmitter.emit(playerName, true);
+                                that.rawPlayers.splice(
+                                  that.rawPlayers.indexOf(playerName),
+                                  1
+                                );
+                              } else {
+                                textChannel.send(
+                                  prompts.noUserForAccept.replace(
+                                    "${player}",
+                                    playerName
+                                  )
+                                );
+                              }
+                            }
+                          }
+
+                          if (
+                            msg.content.startsWith(config.prefix + "decline")
+                          ) {
+                            let args = msg.content.split(" ");
+
+                            if (args.length == 1) {
+                              let playersToAccept = that.rawPlayers.join("\n");
+                              textChannel.send(
+                                `List of players for decline:\n${playersToAccept}`
+                              );
+                            }
+
+                            if (args.length > 1) {
+                              let playerName = args[1];
+                              if (that.rawPlayers.includes(playerName)) {
+                                that.eventEmitter.emit(playerName, false);
+                                that.rawPlayers.splice(
+                                  that.rawPlayers.indexOf(playerName),
+                                  1
+                                );
+                              } else {
+                                textChannel.send(
+                                  prompts.noUserForAccept.replace(
+                                    "${player}",
+                                    playerName
+                                  )
+                                );
+                              }
+                            }
+                          }
                         }
                       });
                     });
@@ -444,17 +567,11 @@ module.exports = class Recorder {
   }
 
   askQuestion(textChannel) {
-    if (this.nextPlayer.id != this.firstInGame.id) {
-      this.nextPlayer = this.firstInGame;
-      this.questionCounter += 1;
+    this.questionCounter += 1;
 
-      do {
-        this.nextQuestion = this.getRandomInt(0, this.questions.length);
-      } while (this.usedNumbers.includes(this.nextQuestion));
-    } else {
-      this.nextPlayer = this.secondInGame;
-    }
-
+    do {
+      this.nextQuestion = this.getRandomInt(0, this.questions.length);
+    } while (this.usedNumbers.includes(this.nextQuestion));
     if (this.questionCounter == 6) {
       textChannel.send(prompts.noMoreQuestions);
       return;
@@ -462,9 +579,6 @@ module.exports = class Recorder {
 
     this.usedNumbers.push(this.nextQuestion);
 
-    textChannel.send(
-      prompts.playerTurn.replace("${player}", this.nextPlayer.tag)
-    );
     textChannel.send(
       prompts.question
         .replace("${number}", this.questionCounter)

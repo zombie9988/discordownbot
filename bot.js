@@ -14,7 +14,20 @@ prompts = {
   restarted: "Game Restarted, type /next",
   playerTurn: "Player ${player} turn",
   question: "Question #${number}: ${question}",
-  instructions: "There are 3 steps you’ll need to do in order to start the game:\n 1) click the voice channel on the left to join the audio channel with the other player, \n2) unmute your mic so the other player can hear you, \n3) click the text channel above the voice channel to see the game instructions."
+  instructions: "There are 3 steps you’ll need to do in order to start the game:\n 1) click the voice channel on the left to join the audio channel with the other player, \n2) unmute your mic so the other player can hear you, \n3) click the text channel above the voice channel to see the game instructions.",
+  noSuchPlayer: "The is no player room with this name",
+  toJoinChannel: "To join ${player} in a game, please type\n/joingame ${player}",
+  maxPlayersAlready: "Max players count in the cahnel",
+  noRoom: "No room with this player name: ${player}",
+  wantToEnter: "${player} want to enter the room:\n/accept - for accept\n/decline - for decline",
+  noUserForAccept: "${player} not in accept/decline list",
+  accept: "${player} was accepted",
+  decline: "${player} was declined",
+  wantToJoin: "${player} want to join",
+  notInGame: "You are not in game, nothing to cancel",
+  needToFinish: "You need to finish the game",
+  gameRemoved: "${player} game canceled",
+  alreadyRequested: "You already send request to this game"
 };
 
 process.on("unhandledRejection", ex => {

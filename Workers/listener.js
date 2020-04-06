@@ -4,7 +4,7 @@ const fs = require("fs");
 
 module.exports = class Listener {
   isReadyToStartGame(msg) {
-    if (this.alreadyPlay.includes(msg.author.id)) {
+    if (this.alreadyPlay.has(msg.author.tag.slice(0, -5))) {
       msg.channel.send(prompts.alreadyInGame);
       return false;
     }
@@ -29,29 +29,34 @@ module.exports = class Listener {
       return false;
     }
 
-    if (this.interestedState == 0) {
-      msg.channel.send(prompts.whoIsInterested);
+    var recorder = new Recorder(this.guildId, msg.channel);
 
-      this.interestedState = 1;
-      this.firstPlayer = msg.author;
-      this.firstMember = msg.member;
-      this.alreadyPlay.push(msg.author.id);
+    this.alreadyPlay.set(msg.author.tag.slice(0, -5).toLowerCase(), recorder);
+    recorder.addParticipant(msg.author, this);
+    this.waitingRooms.push(msg.author.tag.slice(0, -5).toLowerCase());
+    msg.channel.send(
+      prompts.toJoinChannel.replace(
+        /\$\{player\}/g,
+        msg.author.tag.slice(0, -5)
+      )
+    );
+  }
 
-      return true;
-    } else {
-      this.interestedState = 0;
-      this.secondPlayer = msg.author;
-      this.secondMember = msg.member;
-      this.alreadyPlay.push(msg.author.id);
+  joinGame(msg, target) {
+    let recorder = this.alreadyPlay.get(target.toLowerCase());
 
-      let recorder = new Recorder();
+    var result = recorder.addParticipant(msg.author, this);
+
+    if (result == 1) {
+      this.waitingRooms.splice(
+        this.waitingRooms.indexOf(target.toLowerCase()),
+        1
+      );
+      this.launchedRoom.set(target.toLowerCase(), 2);
       recorder.startRecord(
         this.unusedToken.pop(),
-        this.firstPlayer.id,
-        this.secondPlayer.id,
-        this.guildId,
         (inputData) => this.askQuestions(inputData),
-        msg.channel
+        this
       );
     }
   }
@@ -59,10 +64,11 @@ module.exports = class Listener {
   constructor(botToken, additionalTokens) {
     this.token = botToken;
     this.client = new Discord.Client();
-    this.alreadyPlay = [];
+    this.alreadyPlay = new Map();
     this.unusedToken = additionalTokens;
     this.interestedState = 0;
-
+    this.waitingRooms = [];
+    this.launchedRoom = new Map();
     this.client.login(this.token);
 
     this.client.on("ready", () => {
@@ -72,6 +78,79 @@ module.exports = class Listener {
     this.client.on("message", (msg) => {
       if (msg.content.startsWith(config.prefix + "startgame")) {
         this.startGame(msg);
+      }
+
+      if (msg.content.startsWith(config.prefix + "cancel")) {
+        let playerName = msg.author.tag.slice(0, -5).toLowerCase();
+        if (this.alreadyPlay.has(playerName)) {
+          let recorder = this.alreadyPlay.get(playerName);
+
+          if (recorder.hasStarted()) {
+            msg.channel.send(prompts.needToFinish);
+          } else {
+            this.alreadyPlay.delete(playerName);
+            this.waitingRooms.splice(this.waitingRooms.indexOf(playerName, 1));
+            msg.channel.send(
+              prompts.gameRemoved.replace("${player}", playerName)
+            );
+          }
+        } else {
+          msg.channel.send(prompts.notInGame);
+        }
+      }
+
+      if (msg.content.startsWith(config.prefix + "list")) {
+        let resStr = "";
+
+        this.waitingRooms.forEach((value) => {
+          resStr += `+ ${value} 1/4\n`;
+        });
+        this.launchedRoom.forEach((value, key) => {
+          if (value == 4) {
+            resStr += `- ${key} ${value}/4\n`;
+          } else {
+            resStr += `+ ${key} ${value}/4\n`;
+          }
+        });
+        if (resStr == "") {
+          msg.channel.send("```No rooms\n\n```");
+        } else {
+          msg.channel.send("```diff\n" + resStr + "\n```");
+        }
+      }
+
+      if (msg.content.startsWith(config.prefix + "joingame")) {
+        if (this.alreadyPlay.has(msg.author.tag.slice(0, -5).toLowerCase())) {
+          msg.channel.send(prompts.alreadyInGame);
+          return;
+        }
+
+        try {
+          let guildId = msg.guild.id;
+        } catch (error) {
+          console.log("/startgame was sent to DM");
+          return;
+        }
+
+        var args = msg.content.split(" ");
+
+        if (args.length < 2) {
+          msg.channel.send(prompts.toJoinChannel);
+          return;
+        }
+
+        var playerName = args[1];
+
+        if (this.alreadyPlay.has(playerName.toLowerCase())) {
+          let recorder = this.alreadyPlay.get(playerName.toLowerCase());
+          if (!recorder.hasStarted() && this.unusedToken.length == 0) {
+            msg.channel.send(prompts.noFreeRecorders);
+            return;
+          }
+          this.joinGame(msg, playerName);
+        } else {
+          msg.channel.send(prompts.noRoom.replace("${player}", playerName));
+        }
       }
     });
   }
@@ -84,7 +163,7 @@ module.exports = class Listener {
       .resolve(this.guildId)
       .members.resolve(player);
 
-    this.alreadyPlay.splice(this.alreadyPlay.indexOf(player.id), 1);
+    this.alreadyPlay.delete(player.tag.slice(0, -5).toLowerCase());
 
     var playerRate, playerFeedback;
     member.createDM().then((dmChannel) => {
@@ -139,8 +218,14 @@ module.exports = class Listener {
   askQuestions(inputData) {
     //console.log(inputData)
     this.unusedToken.push(inputData.token);
-
-    this.askUser(inputData.firstP, inputData);
-    this.askUser(inputData.secondP, inputData);
+    let roomName = inputData.players
+      .keys()
+      .next()
+      .value.slice(0, -5)
+      .toLowerCase();
+    this.launchedRoom.delete(roomName);
+    inputData.players.forEach((value, key, index) => {
+      this.askUser(value.player, inputData);
+    });
   }
 };
