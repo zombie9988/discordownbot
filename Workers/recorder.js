@@ -111,6 +111,7 @@ module.exports = class Recorder {
       );
 
       that.eventEmitter.on(player.tag.slice(0, -5).toLowerCase(), (result) => {
+        
         if (result) {
           resolve();
         } else {
@@ -147,26 +148,34 @@ module.exports = class Recorder {
       var that = this;
       this.askPermission(player)
         .then(() => {
+          //console.log(`Then after ${player}`);
           var obj = that.resolveMemberFromPlayer(player, that.guildId);
           that.participantsArr.set(player.tag, obj);
           listener.alreadyPlay.set(player.tag.slice(0, -5).toLowerCase(), that);
-          let roomName = that.participantsArr.keys().next().value.slice(0, -5).toLowerCase();
-          listener.launchedRoom.set(roomName, listener.launchedRoom.get(roomName) + 1);
+          let roomName = that.participantsArr
+            .keys()
+            .next()
+            .value.slice(0, -5)
+            .toLowerCase();
+          listener.launchedRoom.set(
+            roomName,
+            listener.launchedRoom.get(roomName) + 1
+          );
           that.outTextChannel.send(
             prompts.accept.replace("${player}", player.tag)
           );
-          that.localTextChannel.overwritePermissions([
-            {
-              id: player.id,
-              allow: ["READ_MESSAGE_HISTORY", "SEND_MESSAGES", "VIEW_CHANNEL"],
-            },
-          ]);
-          that.localVoiceChannel.overwritePermissions([
-            {
-              id: player.id,
-              allow: ["CONNECT", "VIEW_CHANNEL", "SPEAK"],
-            },
-          ]);
+          that.localTextChannel.updateOverwrite(player.id, {
+            READ_MESSAGE_HISTORY: true,
+            SEND_MESSAGES: true,
+            VIEW_CHANNEL: true,
+          });
+
+          that.localVoiceChannel.updateOverwrite(player.id, {
+            CONNECT: true,
+            VIEW_CHANNEL: true,
+            SPEAK: true,
+          });
+
           that.outTextChannel.send(prompts.instructions);
         })
         .catch(() => {
