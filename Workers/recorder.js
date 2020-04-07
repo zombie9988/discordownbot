@@ -102,12 +102,12 @@ module.exports = class Recorder {
 
   askPermission(player) {
     var that = this;
-    this.localTextChannel.send(
-      prompts.wantToJoin.replace("${player}", player.tag)
-    );
+    //this.localTextChannel.send(
+    //  prompts.wantToJoin.replace("${player}", player.tag)
+    //);
     return new Promise((resolve, reject) => {
       that.localTextChannel.send(
-        prompts.wantToEnter.replace("${player}", player.tag)
+        prompts.wantToEnter.replace(/\$\{player\}/g, player.tag.slice(0, -5).toLowerCase())
       );
 
       that.eventEmitter.on(player.tag.slice(0, -5).toLowerCase(), (result) => {
