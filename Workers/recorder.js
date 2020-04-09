@@ -5,7 +5,7 @@ const mkdirp = require("mkdirp");
 const childProcess = require("child_process");
 const { Readable } = require("stream");
 const EventEmitter = require("events");
-
+const path = require("path");
 class Silence extends Readable {
   _read() {
     this.push(Buffer.from([0xf8, 0xff, 0xfe]));
@@ -45,6 +45,7 @@ module.exports = class Recorder {
     var dirnamePlayer = dirname + "/" + player.tag;
 
     if (fs.existsSync(dirnamePlayer + "/output.wav")) {
+      childProcess.execSync(`lame -f ${dirnamePlayer}/output.wav ${dirnamePlayer}/output.mp3`);
       this.wavDirs.push(dirnamePlayer + "/output.wav");
     } else {
       console.log("No audio for " + player.tag);
@@ -59,9 +60,39 @@ module.exports = class Recorder {
     }
   }
 
+  deleteTemp(dirname) {
+    fs.readdir(dirname, (err, files) => {
+      if (err) {
+        console.log(`Delete trash error ${err}`);
+      } else {
+        files.forEach((file) => {
+          var filepath = path.join(dirname, file);
+
+          fs.stat(filepath, (err, stats) => {
+            if (stats.isDirectory) {
+              fs.readdir(filepath, (err, files) => {
+                if (files) {
+                  files.forEach((value) => {
+                    if (value != "output.mp3") {
+                      fs.unlinkSync(path.join(filepath, value));
+                    }
+                  });
+                }
+              });
+            }
+          });
+        });
+      }
+    });
+  }
+
   finishGame(dirname, guildChannel, textChannel, category) {
     this.wavDirs = [];
     var that = this;
+
+    guildChannel.delete();
+    textChannel.delete();
+    category.delete();
 
     if (!fs.existsSync(dirname)) {
       mkdirp.sync(dirname);
@@ -77,17 +108,28 @@ module.exports = class Recorder {
     });
 
     fs.writeFileSync(`${dirname}/chat.txt`, allText);
-    if (this.wavDirs.length > 1) {
+    if (this.wavDirs.length > 0) {
+      if (this.wavDirs.length > 1) {
+        childProcess.execSync(
+          "sox -m " + this.wavDirs.join(" ") + " " + dirname + "/output.wav"
+        );
+      } else if (this.wavDirs.length == 1) {
+        fs.copyFileSync(this.wavDirs[0], `${dirname}/output.wav`);
+      }
+
+      this.wavDirs.forEach((value) => {
+        fs.unlinkSync(value);
+      });
+
       childProcess.execSync(
-        "sox -m " + this.wavDirs.join(" ") + " " + dirname + "/output.wav"
+        `lame -f ${dirname}/output.wav ${dirname}/output.mp3`
       );
-    } else if (this.wavDirs.length == 1) {
-      fs.copyFileSync(this.wavDirs[0], `${dirname}/output.wav`);
+
+      fs.unlinkSync(`${dirname}/output.wav`);
     }
 
-    guildChannel.delete();
-    textChannel.delete();
-    category.delete();
+    this.deleteTemp(dirname);
+
     this.client.destroy();
   }
 
@@ -107,11 +149,13 @@ module.exports = class Recorder {
     //);
     return new Promise((resolve, reject) => {
       that.localTextChannel.send(
-        prompts.wantToEnter.replace(/\$\{player\}/g, player.tag.slice(0, -5).toLowerCase())
+        prompts.wantToEnter.replace(
+          /\$\{player\}/g,
+          player.tag.slice(0, -5).toLowerCase()
+        )
       );
 
       that.eventEmitter.on(player.tag.slice(0, -5).toLowerCase(), (result) => {
-        
         if (result) {
           resolve();
         } else {
@@ -176,7 +220,9 @@ module.exports = class Recorder {
             SPEAK: true,
           });
 
-          that.outTextChannel.send(" ", {files: ["./resources/images/image.png"]});
+          that.outTextChannel.send(`<@${player.id}>`, {
+            files: ["./resources/images/image.png"],
+          });
         })
         .catch(() => {
           that.outTextChannel.send(
@@ -310,7 +356,10 @@ module.exports = class Recorder {
 
                       that.recordedVoices = [];
 
-                      that.outTextChannel.send(" ", {files: ["./resources/images/image.png"]});
+                      that.outTextChannel.send(
+                        `<@${that.firstPlayer.id}>, <@${that.secondPlayer.id}>`,
+                        { files: ["./resources/images/image.png"] }
+                      );
                       that.questionCounter = 0;
                       that.usedNumbers = [];
 
@@ -578,13 +627,14 @@ module.exports = class Recorder {
   askQuestion(textChannel) {
     this.questionCounter += 1;
 
-    do {
-      this.nextQuestion = this.getRandomInt(0, this.questions.length);
-    } while (this.usedNumbers.includes(this.nextQuestion));
-    if (this.questionCounter == 6) {
+    if (this.questionCounter >= this.questions.length) {
       textChannel.send(prompts.noMoreQuestions);
       return;
     }
+
+    do {
+      this.nextQuestion = this.getRandomInt(0, this.questions.length);
+    } while (this.usedNumbers.includes(this.nextQuestion));
 
     this.usedNumbers.push(this.nextQuestion);
 
