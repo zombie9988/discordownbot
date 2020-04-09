@@ -27,7 +27,8 @@ prompts = {
   notInGame: "You are not in game, nothing to cancel",
   needToFinish: "You need to finish the game",
   gameRemoved: "${player} game canceled",
-  alreadyRequested: "You already send request to this game"
+  alreadyRequested: "You already send request to this game",
+  hello: "Welcome to the Pinyata game! You should be connected through audio. Take turns answering the questions that appear on the screen below"
 };
 
 process.on("unhandledRejection", ex => {

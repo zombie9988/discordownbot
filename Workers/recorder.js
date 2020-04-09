@@ -44,9 +44,8 @@ module.exports = class Recorder {
   saveResults(player, dirname) {
     var dirnamePlayer = dirname + "/" + player.tag;
 
-    if (fs.existsSync(dirnamePlayer + "/output.wav")) {
-      childProcess.execSync(`lame -f ${dirnamePlayer}/output.wav ${dirnamePlayer}/output.mp3`);
-      this.wavDirs.push(dirnamePlayer + "/output.wav");
+    if (fs.existsSync(dirnamePlayer + "/output.mp3")) {
+      this.wavDirs.push(dirnamePlayer + "/output.mp3");
     } else {
       console.log("No audio for " + player.tag);
     }
@@ -111,21 +110,11 @@ module.exports = class Recorder {
     if (this.wavDirs.length > 0) {
       if (this.wavDirs.length > 1) {
         childProcess.execSync(
-          "sox -m " + this.wavDirs.join(" ") + " " + dirname + "/output.wav"
+          "sox -m " + this.wavDirs.join(" ") + " " + dirname + "/output.mp3"
         );
       } else if (this.wavDirs.length == 1) {
-        fs.copyFileSync(this.wavDirs[0], `${dirname}/output.wav`);
+        fs.copyFileSync(this.wavDirs[0], `${dirname}/output.mp3`);
       }
-
-      this.wavDirs.forEach((value) => {
-        fs.unlinkSync(value);
-      });
-
-      childProcess.execSync(
-        `lame -f ${dirname}/output.wav ${dirname}/output.mp3`
-      );
-
-      fs.unlinkSync(`${dirname}/output.wav`);
     }
 
     this.deleteTemp(dirname);
@@ -252,12 +241,12 @@ module.exports = class Recorder {
     this.client = new Discord.Client();
     this.token = botToken;
     this.client.login(this.token);
+    
     this.questions = fs.readFileSync("questions.txt").toString().split("\r\n");
     var that = this;
 
     this.client.on("ready", () => {
       console.log("Recorder ready");
-
       that.rawPlayers.forEach((value, index) => {
         that.addParticipant(value, listener);
       });
@@ -297,7 +286,6 @@ module.exports = class Recorder {
                 ],
               })
               .then((guildChannel) => {
-                var startTime = Date.now();
                 guildChannel.setParent(category);
                 console.log("New voice channel created!");
                 localGuild.channels
@@ -340,6 +328,8 @@ module.exports = class Recorder {
                     ],
                   })
                   .then((textChannel) => {
+                    var startTime = null;
+                    textChannel.send(prompts.hello);
                     textChannel.setParent(category);
                     that.localTextChannel = textChannel;
                     that.localVoiceChannel = guildChannel;
@@ -405,6 +395,10 @@ module.exports = class Recorder {
                           user &&
                           user.id != that.client.user.id
                         ) {
+                          if (startTime == null) {
+                            startTime = Date.now();
+                          }
+
                           if (silenceTiming.has(user.tag)) {
                             silenceTiming.set(
                               user.tag,
@@ -454,56 +448,62 @@ module.exports = class Recorder {
                         ) {
                           if (silenceTiming.has(user.tag)) {
                             var silenceTime = silenceTiming.get(user.tag);
-                            childProcess
-                              .execSync(
-                                "sox -n -r 44100 -c 2 " +
-                                  dirname +
-                                  "/" +
-                                  user.tag +
-                                  "/silence.wav trim 0.0 " +
-                                  silenceTime
-                              )
-                              .toString();
-                            var silencePath =
-                              dirname + "/" + user.tag + "/silence.wav";
-                            var recordedPath =
-                              dirname + "/" + user.tag + "/recorded.mp3";
-                            var outputPath =
-                              dirname + "/" + user.tag + "/output.wav";
 
-                            var outputPath2 =
-                              dirname + "/" + user.tag + "/output2.wav";
-
-                            if (!fs.existsSync(outputPath)) {
-                              childProcess
-                                .execSync(
-                                  "sox " +
-                                    silencePath +
-                                    " " +
-                                    recordedPath +
-                                    " " +
-                                    outputPath
-                                )
-                                .toString();
-                            } else {
-                              fs.copyFileSync(outputPath, outputPath2);
-                              childProcess
-                                .execSync(
-                                  "sox " +
-                                    outputPath2 +
-                                    " " +
-                                    silencePath +
-                                    " " +
-                                    recordedPath +
-                                    " " +
-                                    outputPath
-                                )
-                                .toString();
+                            if (silenceTime <= 0) {
+                              silenceTime = 0.01;
                             }
-                          }
 
-                          silenceTiming.set(user.tag, Date.now());
-                        }
+                            silenceTiming.set(user.tag, Date.now());
+                            //console.log(`${user.tag}:${silenceTime}`);
+                            childProcess.exec(
+                              "sox -n -r 44100 -c 2 " +
+                                dirname +
+                                "/" +
+                                user.tag +
+                                "/silence.mp3 trim 0.0 " +
+                                silenceTime,
+                              (error, stdout, stderr) => {
+                                var silencePath =
+                                  dirname + "/" + user.tag + "/silence.mp3";
+                                var recordedPath =
+                                  dirname + "/" + user.tag + "/recorded.mp3";
+                                var outputPath =
+                                  dirname + "/" + user.tag + "/output.mp3";
+
+                                var outputPath2 =
+                                  dirname + "/" + user.tag + "/output2.mp3";
+
+                                if (!fs.existsSync(outputPath)) {
+                                  childProcess.exec(
+                                    "sox " +
+                                      silencePath +
+                                      " " +
+                                      recordedPath +
+                                      " " +
+                                      outputPath,
+                                    () => {}
+                                  );
+                                } else {
+                                  fs.copyFile(outputPath, outputPath2, () => {
+                                    childProcess.exec(
+                                      "sox " +
+                                        outputPath2 +
+                                        " " +
+                                        silencePath +
+                                        " " +
+                                        recordedPath +
+                                        " " +
+                                        outputPath,
+                                      () => {}
+                                    );
+                                  });
+                                }
+                              }
+                            );
+                          } else {
+                            silenceTiming.set(user.tag, Date.now());
+                          }
+                        } 
                       });
 
                       that.client.on("message", (msg) => {

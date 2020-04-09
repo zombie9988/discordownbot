@@ -157,7 +157,7 @@ module.exports = class Listener {
 
   askUser(player, inputData) {
     var dirname = inputData.dir;
-    var waitTime = 60000;
+    var waitTime = 300000;
 
     var member = this.client.guilds
       .resolve(this.guildId)
