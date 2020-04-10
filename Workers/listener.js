@@ -132,8 +132,7 @@ module.exports = class Listener {
           return;
         }
 
-        var args = msg.content.split(" ");
-
+        var args = msg.content.split(/ (.*)/);
         if (args.length < 2) {
           msg.channel.send(prompts.toJoinChannel);
           return;

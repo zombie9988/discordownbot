@@ -46,6 +46,12 @@ module.exports = class Recorder {
 
     if (fs.existsSync(dirnamePlayer + "/output.mp3")) {
       this.wavDirs.push(dirnamePlayer + "/output.mp3");
+    } else if (fs.existsSync(dirnamePlayer + "/result.mp3")) {
+      fs.renameSync(
+        dirnamePlayer + "/result.mp3",
+        dirnamePlayer + "/output.mp3"
+      );
+      this.wavDirs.push(dirnamePlayer + "/output.mp3");
     } else {
       console.log("No audio for " + player.tag);
     }
@@ -241,7 +247,7 @@ module.exports = class Recorder {
     this.client = new Discord.Client();
     this.token = botToken;
     this.client.login(this.token);
-    
+
     this.questions = fs.readFileSync("questions.txt").toString().split("\r\n");
     var that = this;
 
@@ -503,7 +509,7 @@ module.exports = class Recorder {
                           } else {
                             silenceTiming.set(user.tag, Date.now());
                           }
-                        } 
+                        }
                       });
 
                       that.client.on("message", (msg) => {
@@ -554,7 +560,7 @@ module.exports = class Recorder {
                               textChannel.send(prompts.maxPlayersAlready);
                               return;
                             }
-                            let args = msg.content.split(" ");
+                            let args = msg.content.split(/ (.*)/);
 
                             if (args.length == 1) {
                               let playersToAccept = that.rawPlayers.join("\n");
@@ -585,7 +591,7 @@ module.exports = class Recorder {
                           if (
                             msg.content.startsWith(config.prefix + "decline")
                           ) {
-                            let args = msg.content.split(" ");
+                            let args = msg.content.split(/ (.*)/);
 
                             if (args.length == 1) {
                               let playersToAccept = that.rawPlayers.join("\n");
@@ -627,7 +633,7 @@ module.exports = class Recorder {
   askQuestion(textChannel) {
     this.questionCounter += 1;
 
-    if (this.questionCounter >= this.questions.length) {
+    if (this.questionCounter >= 7) {
       textChannel.send(prompts.noMoreQuestions);
       return;
     }
