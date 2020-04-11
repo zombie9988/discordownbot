@@ -1,3 +1,7 @@
+.directory
+.vscode/
+node_modules/
+recordings/
 recordings/.directory
 node_modules/.bin/mkdirp
 node_modules/.bin/n

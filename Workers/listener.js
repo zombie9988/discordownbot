@@ -211,7 +211,9 @@ module.exports = class Listener {
             dmChannel.send(prompts.finishPlaying);
           });
       });
-    });
+    }).catch(
+      console.log("Unable so send DM to " + player.tag)
+    );
   }
 
   askQuestions(inputData) {

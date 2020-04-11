@@ -633,7 +633,11 @@ module.exports = class Recorder {
   askQuestion(textChannel) {
     this.questionCounter += 1;
 
-    if (this.questionCounter >= 7) {
+    if (this.questionCounter >= 6) {
+      textChannel.send(prompts.canFinish);
+    }
+
+    if (this.questionCounter == this.questions.length - 1) {
       textChannel.send(prompts.noMoreQuestions);
       return;
     }

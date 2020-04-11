@@ -28,6 +28,7 @@ prompts = {
   needToFinish: "You need to finish the game",
   gameRemoved: "${player} game canceled",
   alreadyRequested: "You already send request to this game",
+  canFinish: "You can type /finish to end the game",
   hello: "Welcome to the Pinyata game! You should be connected through audio. Take turns answering the questions that appear on the screen below"
 };
 
