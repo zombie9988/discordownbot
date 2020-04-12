@@ -32,6 +32,7 @@ module.exports = class Listener {
     var recorder = new Recorder(this.guildId, msg.channel);
 
     this.alreadyPlay.set(msg.author.tag.slice(0, -5).toLowerCase(), recorder);
+    this.gamesToStart.push(msg.author.tag.slice(0, -5).toLowerCase());
     recorder.addParticipant(msg.author, this);
     this.waitingRooms.push(msg.author.tag.slice(0, -5).toLowerCase());
     msg.channel.send(
@@ -63,6 +64,7 @@ module.exports = class Listener {
 
   constructor(botToken, additionalTokens) {
     this.token = botToken;
+    this.gamesToStart = [];
     this.client = new Discord.Client();
     this.alreadyPlay = new Map();
     this.unusedToken = additionalTokens;
@@ -82,12 +84,13 @@ module.exports = class Listener {
 
       if (msg.content.startsWith(config.prefix + "cancel")) {
         let playerName = msg.author.tag.slice(0, -5).toLowerCase();
-        if (this.alreadyPlay.has(playerName)) {
+        if (this.gamesToStart.includes(playerName)) {
           let recorder = this.alreadyPlay.get(playerName);
 
           if (recorder.hasStarted()) {
             msg.channel.send(prompts.needToFinish);
           } else {
+            this.gamesToStart.splice(this.gamesToStart.indexOf(playerName, 1));
             this.alreadyPlay.delete(playerName);
             this.waitingRooms.splice(this.waitingRooms.indexOf(playerName, 1));
             msg.channel.send(
@@ -121,8 +124,22 @@ module.exports = class Listener {
 
       if (msg.content.startsWith(config.prefix + "joingame")) {
         if (this.alreadyPlay.has(msg.author.tag.slice(0, -5).toLowerCase())) {
-          msg.channel.send(prompts.alreadyInGame);
-          return;
+          if (
+            this.gamesToStart.includes(
+              msg.author.tag.slice(0, -5).toLowerCase()
+            )
+          ) {
+            var playerName = msg.author.tag.slice(0, -5).toLowerCase();
+            this.gamesToStart.splice(this.gamesToStart.indexOf(playerName, 1));
+            this.alreadyPlay.delete(playerName);
+            this.waitingRooms.splice(this.waitingRooms.indexOf(playerName, 1));
+            msg.channel.send(
+              prompts.gameRemoved.replace("${player}", playerName)
+            );
+          } else {
+            msg.channel.send(prompts.alreadyInGame);
+            return;
+          }
         }
 
         try {
@@ -165,55 +182,56 @@ module.exports = class Listener {
     this.alreadyPlay.delete(player.tag.slice(0, -5).toLowerCase());
 
     var playerRate, playerFeedback;
-    member.createDM().then((dmChannel) => {
-      dmChannel.send(prompts.askRate).then((msg) => {
-        const filter = (msg) => {
-          if (Number(msg.content)) {
-            if (1 <= Number(msg.content) <= 5) {
-              playerRate = msg.content;
-              return true;
+    member
+      .createDM()
+      .then((dmChannel) => {
+        dmChannel.send(prompts.askRate).then((msg) => {
+          const filter = (msg) => {
+            if (Number(msg.content)) {
+              if (1 <= Number(msg.content) <= 5) {
+                playerRate = msg.content;
+                return true;
+              } else {
+                return false;
+              }
             } else {
               return false;
             }
-          } else {
-            return false;
-          }
-        };
-        dmChannel
-          .awaitMessages(filter, {
-            max: 1,
-            time: waitTime,
-            errors: ["time"],
-          })
-          .then((collected) =>
-            dmChannel.send(prompts.askFeedback).then((msg) => {
-              const filter = (msg) => {
-                playerFeedback = msg.content;
-                return true;
-              };
-              dmChannel
-                .awaitMessages(filter, {
-                  max: 1,
-                  time: waitTime,
-                  errors: ["time"],
-                })
-                .finally(() => {
-                  dmChannel.send(prompts.finishPlaying);
-
-                  fs.appendFileSync(
-                    dirname + "/feedback.csv",
-                    `${player.tag},${playerRate},${playerFeedback}\n`
-                  );
-                });
+          };
+          dmChannel
+            .awaitMessages(filter, {
+              max: 1,
+              time: waitTime,
+              errors: ["time"],
             })
-          )
-          .catch((collected) => {
-            dmChannel.send(prompts.finishPlaying);
-          });
-      });
-    }).catch(
-      console.log("Unable so send DM to " + player.tag)
-    );
+            .then((collected) =>
+              dmChannel.send(prompts.askFeedback).then((msg) => {
+                const filter = (msg) => {
+                  playerFeedback = msg.content;
+                  return true;
+                };
+                dmChannel
+                  .awaitMessages(filter, {
+                    max: 1,
+                    time: waitTime,
+                    errors: ["time"],
+                  })
+                  .finally(() => {
+                    dmChannel.send(prompts.finishPlaying);
+
+                    fs.appendFileSync(
+                      dirname + "/feedback.csv",
+                      `${player.tag},${playerRate},${playerFeedback}\n`
+                    );
+                  });
+              })
+            )
+            .catch((collected) => {
+              dmChannel.send(prompts.finishPlaying);
+            });
+        });
+      })
+      .catch(console.log("Unable so send DM to " + player.tag));
   }
 
   askQuestions(inputData) {
