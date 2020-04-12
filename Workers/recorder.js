@@ -6,6 +6,7 @@ const childProcess = require("child_process");
 const { Readable } = require("stream");
 const EventEmitter = require("events");
 const path = require("path");
+
 class Silence extends Readable {
   _read() {
     this.push(Buffer.from([0xf8, 0xff, 0xfe]));
@@ -187,7 +188,6 @@ module.exports = class Recorder {
       var that = this;
       this.askPermission(player)
         .then(() => {
-          //console.log(`Then after ${player}`);
           var obj = that.resolveMemberFromPlayer(player, that.guildId);
           that.participantsArr.set(player.tag, obj);
           listener.alreadyPlay.set(player.tag.slice(0, -5).toLowerCase(), that);
@@ -249,6 +249,10 @@ module.exports = class Recorder {
     this.client.login(this.token);
 
     this.questions = fs.readFileSync("questions.txt").toString().split("\r\n");
+    this.mainQuestions = fs
+      .readFileSync("ice-breaker-questions.txt")
+      .toString()
+      .split("\n");
     var that = this;
 
     this.client.on("ready", () => {
@@ -553,6 +557,35 @@ module.exports = class Recorder {
                             that.askQuestion(textChannel);
                           }
 
+                          if (msg.content.startsWith(config.prefix + "exit")) {
+                            listener.alreadyPlay.delete(msg.author.tag.slice(0, -5).toLowerCase())
+
+                            let roomName = that.participantsArr
+                              .keys()
+                              .next()
+                              .value.slice(0, -5)
+                              .toLowerCase();
+
+                            listener.launchedRoom.set(
+                              roomName,
+                              listener.launchedRoom.get(roomName) - 1
+                            );
+                            
+                            that.connectToVoiceChat(msg.member, null);
+
+                            that.localTextChannel.updateOverwrite(msg.author.id, {
+                              READ_MESSAGE_HISTORY: false,
+                              SEND_MESSAGES: false,
+                              VIEW_CHANNEL: false,
+                            });
+
+                            that.localVoiceChannel.updateOverwrite(msg.author.id, {
+                              CONNECT: false,
+                              VIEW_CHANNEL: false,
+                              SPEAK: false,
+                            });
+                          }
+
                           if (
                             msg.content.startsWith(config.prefix + "accept")
                           ) {
@@ -633,25 +666,39 @@ module.exports = class Recorder {
   askQuestion(textChannel) {
     this.questionCounter += 1;
 
-    if (this.questionCounter >= 6) {
-      textChannel.send(prompts.canFinish);
+    if (this.questionCounter <= 2) {
+      do {
+        this.nextQuestion = this.getRandomInt(0, this.mainQuestions.length);
+      } while (this.usedNumbers.includes(this.nextQuestion));
+
+      this.usedNumbers.push(this.nextQuestion);
+
+      textChannel.send(
+        prompts.question
+          .replace("${number}", this.questionCounter)
+          .replace("${question}", this.mainQuestions[this.nextQuestion])
+      );
+    } else {
+      if (this.questionCounter >= 6) {
+        textChannel.send(prompts.canFinish);
+      }
+
+      if (this.questionCounter == this.questions.length - 1) {
+        textChannel.send(prompts.noMoreQuestions);
+        return;
+      }
+
+      do {
+        this.nextQuestion = this.getRandomInt(0, this.questions.length);
+      } while (this.usedNumbers.includes(this.nextQuestion));
+
+      this.usedNumbers.push(this.nextQuestion);
+
+      textChannel.send(
+        prompts.question
+          .replace("${number}", this.questionCounter)
+          .replace("${question}", this.questions[this.nextQuestion])
+      );
     }
-
-    if (this.questionCounter == this.questions.length - 1) {
-      textChannel.send(prompts.noMoreQuestions);
-      return;
-    }
-
-    do {
-      this.nextQuestion = this.getRandomInt(0, this.questions.length);
-    } while (this.usedNumbers.includes(this.nextQuestion));
-
-    this.usedNumbers.push(this.nextQuestion);
-
-    textChannel.send(
-      prompts.question
-        .replace("${number}", this.questionCounter)
-        .replace("${question}", this.questions[this.nextQuestion])
-    );
   }
 };
